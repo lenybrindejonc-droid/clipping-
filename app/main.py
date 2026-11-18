@@ -68,6 +68,10 @@ def _load_existing() -> None:
 
 _load_existing()
 
+if os.getenv("KEEP_SOURCE", "0") != "1":
+    for _f in JOBS.glob("*/source*"):
+        _f.unlink(missing_ok=True)
+
 # Pondération des étapes dans la barre de progression globale
 STAGES = {"download": (0, 15), "transcribe": (15, 55), "analyze": (55, 65), "render": (65, 100)}
 
@@ -116,13 +120,20 @@ def run_job(job_id: str) -> None:
                           "duration": round(m["end"] - m["start"], 1)})
             _update(job_id, clips=clips)
 
-        if os.getenv("KEEP_SOURCE", "0") != "1":
-            info["path"].unlink(missing_ok=True)
         _update(job_id, status="done", progress=100, message=f"{len(clips)} shorts prêts !")
     except Exception as exc:
         traceback.print_exc()
         msg = str(exc).strip().splitlines()[-1] if str(exc).strip() else exc.__class__.__name__
+        if "No space left" in str(exc) or "Errno 28" in str(exc):
+            msg = "disque plein — libère de la place (commande : df -h ~)"
         _update(job_id, status="error", message=f"Erreur : {pipeline._strip(msg)}")
+    finally:
+        # Supprime la vidéo source et les fichiers temporaires, même en cas d'échec
+        if os.getenv("KEEP_SOURCE", "0") != "1":
+            for f in work.glob("source*"):
+                f.unlink(missing_ok=True)
+        for f in work.glob("*.ass"):
+            f.unlink(missing_ok=True)
 
 
 @app.post("/api/jobs")
