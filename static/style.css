@@ -1,0 +1,72 @@
+:root {
+  --bg: #0b0b10;
+  --card: #15151d;
+  --line: #262633;
+  --text: #f2f2f7;
+  --muted: #9a9aae;
+  --accent: #ff2e63;
+  --accent2: #20e3d2;
+  --radius: 16px;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--text);
+  font: 16px/1.5 Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+}
+.hero { max-width: 860px; margin: 0 auto; padding: 48px 16px 24px; text-align: center; }
+.logo { font-weight: 800; font-size: 20px; letter-spacing: .5px; margin-bottom: 24px; }
+h1 { font-size: clamp(28px, 5vw, 48px); line-height: 1.1; margin: 0 0 12px; }
+h1 em {
+  font-style: normal;
+  background: linear-gradient(90deg, var(--accent), var(--accent2));
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.sub { color: var(--muted); max-width: 620px; margin: 0 auto 28px; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; }
+form.card { text-align: left; }
+.url-row { display: flex; gap: 10px; flex-wrap: wrap; }
+input, select, textarea {
+  background: #0f0f15; color: var(--text); border: 1px solid var(--line);
+  border-radius: 10px; padding: 12px 14px; font: inherit; width: 100%;
+}
+.url-row input { flex: 1 1 320px; font-size: 17px; }
+button, .btn {
+  border: 0; border-radius: 10px; padding: 12px 18px; font: inherit; font-weight: 700; cursor: pointer;
+  background: var(--accent); color: #fff; text-decoration: none; display: inline-flex; align-items: center; justify-content: center;
+}
+button:disabled { opacity: .5; cursor: wait; }
+.btn.ghost { background: transparent; border: 1px solid var(--line); color: var(--text); }
+details { margin-top: 12px; }
+summary { cursor: pointer; color: var(--muted); }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-top: 12px; }
+label { font-size: 13px; color: var(--muted); display: flex; flex-direction: column; gap: 6px; }
+label.check { flex-direction: row; align-items: center; color: var(--text); font-size: 15px; }
+label.check input { width: auto; }
+.error { color: #ff7a8a; margin: 10px 0 0; }
+main { max-width: 1200px; margin: 0 auto; padding: 0 16px 64px; }
+.status { max-width: 860px; margin: 0 auto 24px; }
+.status-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.status h2 { font-size: 18px; margin: 0 0 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.badge { font-size: 12px; border: 1px solid var(--line); border-radius: 99px; padding: 2px 10px; color: var(--muted); white-space: nowrap; }
+.bar { height: 10px; background: #0f0f15; border-radius: 99px; overflow: hidden; }
+#bar-fill { height: 100%; width: 0; background: linear-gradient(90deg, var(--accent), var(--accent2)); transition: width .6s ease; }
+.muted { color: var(--muted); }
+.clips { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 20px; }
+.clip { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; display: flex; flex-direction: column; }
+.clip video { width: 100%; aspect-ratio: 9 / 16; background: #000; display: block; }
+.clip-body { padding: 14px; display: flex; flex-direction: column; gap: 8px; flex: 1; }
+.clip-top { display: flex; justify-content: space-between; font-size: 13px; }
+.score { font-weight: 800; color: var(--accent2); }
+.clip h4 { margin: 0; font-size: 16px; }
+.reason { font-size: 13px; margin: 0; }
+.caption { font-size: 13px; resize: vertical; }
+.actions { display: flex; gap: 8px; margin-top: auto; }
+.actions > * { flex: 1; padding: 10px; font-size: 14px; }
+h3 { color: var(--muted); font-size: 14px; text-transform: uppercase; letter-spacing: 1px; margin-top: 48px; }
+.history { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
+.history li {
+  background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px;
+  display: flex; justify-content: space-between; gap: 12px; cursor: pointer;
+}
+.history li:hover { border-color: var(--accent); }
+.history .h-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

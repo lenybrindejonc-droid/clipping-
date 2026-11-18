@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Clipping — YouTube → Shorts viraux</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <header class="hero">
+    <div class="logo">✂️ <span>Clipping</span></div>
+    <h1>Transforme une vidéo YouTube en <em>shorts viraux</em></h1>
+    <p class="sub">Colle un lien. L'IA repère les meilleurs moments, recadre en 9:16 et ajoute les sous-titres animés. Prêt pour TikTok, Reels et Shorts.</p>
+
+    <form id="form" class="card">
+      <div class="url-row">
+        <input id="url" type="url" required placeholder="https://www.youtube.com/watch?v=…" autocomplete="off" />
+        <button id="go" type="submit">Générer les shorts</button>
+      </div>
+      <details>
+        <summary>Réglages</summary>
+        <div class="grid">
+          <label>Nombre de clips
+            <input id="num" type="number" min="1" max="20" value="6" /></label>
+          <label>Durée min (s)
+            <input id="min" type="number" min="5" max="120" value="20" /></label>
+          <label>Durée max (s)
+            <input id="max" type="number" min="10" max="180" value="60" /></label>
+          <label>Cadrage
+            <select id="layout">
+              <option value="crop">Suivi du visage (plein écran)</option>
+              <option value="blur">Vidéo entière + fond flou</option>
+            </select></label>
+          <label>Langue
+            <select id="lang">
+              <option value="">Détection auto</option>
+              <option value="fr">Français</option>
+              <option value="en">Anglais</option>
+              <option value="es">Espagnol</option>
+              <option value="de">Allemand</option>
+              <option value="it">Italien</option>
+              <option value="pt">Portugais</option>
+            </select></label>
+          <label class="check"><input id="subs" type="checkbox" checked /> Sous-titres animés</label>
+        </div>
+      </details>
+      <p id="error" class="error" hidden></p>
+    </form>
+  </header>
+
+  <main>
+    <section id="current" hidden>
+      <div class="card status">
+        <div class="status-head">
+          <h2 id="job-title">Traitement…</h2>
+          <span id="job-engine" class="badge" hidden></span>
+        </div>
+        <div class="bar"><div id="bar-fill"></div></div>
+        <p id="job-msg" class="muted"></p>
+      </div>
+      <div id="clips" class="clips"></div>
+    </section>
+
+    <section id="history-wrap" hidden>
+      <h3>Projets précédents</h3>
+      <ul id="history" class="history"></ul>
+    </section>
+  </main>
+
+  <template id="clip-tpl">
+    <article class="clip">
+      <video controls preload="none" playsinline></video>
+      <div class="clip-body">
+        <div class="clip-top">
+          <span class="score"></span>
+          <span class="time muted"></span>
+        </div>
+        <h4 class="title"></h4>
+        <p class="reason muted"></p>
+        <textarea class="caption" readonly rows="3"></textarea>
+        <div class="actions">
+          <a class="btn dl" download>Télécharger</a>
+          <button class="btn ghost copy" type="button">Copier la légende</button>
+        </div>
+      </div>
+    </article>
+  </template>
+
+  <script src="/app.js"></script>
+</body>
+</html>
