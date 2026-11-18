@@ -65,6 +65,18 @@ def probe_size(path: Path) -> tuple[int, int]:
     return int(w), int(h)
 
 
+def load_audio(path: Path):
+    """Décode l'audio en mono 16 kHz avec ffmpeg (évite PyAV, incompatible en v15+)."""
+    import numpy as np
+
+    out = subprocess.run(
+        ["ffmpeg", "-nostdin", "-loglevel", "error", "-i", str(path),
+         "-vn", "-ac", "1", "-ar", "16000", "-f", "s16le", "-"],
+        capture_output=True, check=True,
+    )
+    return np.frombuffer(out.stdout, np.int16).astype(np.float32) / 32768.0
+
+
 def transcribe(path: Path, progress: Progress, language: str | None = None) -> dict:
     """Transcription Whisper locale avec horodatage au mot près."""
     global _whisper
@@ -75,7 +87,7 @@ def transcribe(path: Path, progress: Progress, language: str | None = None) -> d
         _whisper = WhisperModel(WHISPER_MODEL, device="auto", compute_type="int8")
 
     seg_iter, info = _whisper.transcribe(
-        str(path), word_timestamps=True, vad_filter=True, language=language or None
+        load_audio(path), word_timestamps=True, vad_filter=True, language=language or None
     )
     segments = []
     for s in seg_iter:
