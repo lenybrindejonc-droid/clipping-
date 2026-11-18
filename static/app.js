@@ -66,6 +66,9 @@ function render(job) {
   const engine = $("job-engine");
   engine.hidden = !job.engine;
   engine.textContent = job.engine === "claude" ? "Sélection par Claude" : "Mode sans IA";
+  const note = $("job-note");
+  note.hidden = !job.engine_note;
+  note.textContent = job.engine_note ? `⚠️ Claude n'a pas été utilisé : ${job.engine_note}. Les moments ont été choisis par une méthode basique, bien moins bonne.` : "";
 
   const container = $("clips");
   job.clips.forEach((clip, i) => {

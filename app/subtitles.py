@@ -59,9 +59,10 @@ def write_ass(
             events.append(f"Dialogue: 0,{_ts(start)},{_ts(end)},Main,,0,0,0,,{pop}{' '.join(parts)}")
 
     if hook:
-        # Bandeau d'accroche en haut de l'écran pendant tout le clip
-        events.insert(0, f"Dialogue: 1,{_ts(0)},{_ts(clip_end - clip_start)},Hook,,0,0,0,,"
-                         f"{{\\fad(150,0)}}{_clean(hook)}")
+                # Bandeau visible pendant les 4 premières secondes (le moment où on décide de scroller)
+        hook_end = min(4.0, clip_end - clip_start)
+        events.insert(0, f"Dialogue: 1,{_ts(0)},{_ts(hook_end)},Hook,,0,0,0,,"
+                         f"{{\\fad(120,300)}}{_clean(hook)}")
 
     header = f"""[Script Info]
 ScriptType: v4.00+
@@ -72,7 +73,7 @@ ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Main,{FONT},86,&H00FFFFFF,&H00FFFFFF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,6,3,2,60,60,{int(h * 0.27)},1
+Style: Main,{FONT},96,&H00FFFFFF,&H00FFFFFF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,7,2,2,60,60,{int(h * 0.27)},1
 Style: Hook,{FONT},64,&H00111111,&H00FFFFFF,&H00FFFFFF,&H00FFFFFF,-1,0,0,0,100,100,0,0,3,18,0,8,90,90,{int(h * 0.12)},1
 
 [Events]

@@ -21,14 +21,15 @@
         <summary>Réglages</summary>
         <div class="grid">
           <label>Nombre de clips
-            <input id="num" type="number" min="1" max="20" value="6" /></label>
+            <input id="num" type="number" min="1" max="20" value="5" /></label>
           <label>Durée min (s)
-            <input id="min" type="number" min="5" max="120" value="20" /></label>
+            <input id="min" type="number" min="5" max="120" value="15" /></label>
           <label>Durée max (s)
-            <input id="max" type="number" min="10" max="180" value="60" /></label>
+            <input id="max" type="number" min="10" max="180" value="40" /></label>
           <label>Cadrage
             <select id="layout">
-              <option value="crop">Suivi du visage (plein écran)</option>
+              <option value="auto">Automatique (recommandé)</option>
+              <option value="crop">Toujours plein écran (suivi du visage)</option>
               <option value="blur">Vidéo entière + fond flou</option>
             </select></label>
           <label>Langue
@@ -57,6 +58,7 @@
         </div>
         <div class="bar"><div id="bar-fill"></div></div>
         <p id="job-msg" class="muted"></p>
+        <p id="job-note" class="warn" hidden></p>
       </div>
       <div id="clips" class="clips"></div>
     </section>

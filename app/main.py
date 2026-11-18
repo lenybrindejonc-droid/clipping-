@@ -35,10 +35,10 @@ YOUTUBE = re.compile(r"^https?://(www\.|m\.)?(youtube\.com|youtu\.be)/", re.I)
 
 class JobRequest(BaseModel):
     url: str
-    num_clips: int = Field(6, ge=1, le=20)
-    min_duration: int = Field(20, ge=5, le=120)
-    max_duration: int = Field(60, ge=10, le=180)
-    layout: str = Field("crop", pattern="^(crop|blur)$")
+    num_clips: int = Field(5, ge=1, le=20)
+    min_duration: int = Field(15, ge=5, le=120)
+    max_duration: int = Field(40, ge=10, le=180)
+    layout: str = Field("auto", pattern="^(auto|crop|blur)$")
     subtitles: bool = True
     language: str | None = None
 
@@ -93,13 +93,13 @@ def run_job(job_id: str) -> None:
         (work / "transcript.json").write_text(json.dumps(tr, ensure_ascii=False))
 
         _progress(job_id, "analyze")(0, "L'IA cherche les moments les plus viraux…")
-        moments, engine = find_moments(
+        moments, engine, note = find_moments(
             tr["segments"], info["title"], info["duration"],
             req["num_clips"], req["min_duration"], req["max_duration"],
         )
         if not moments:
             raise RuntimeError("Aucun moment exploitable trouvé (vidéo sans parole ?).")
-        _update(job_id, engine=engine)
+        _update(job_id, engine=engine, engine_note=note)
 
         words = [w for s in tr["segments"] for w in s["words"]]
         clips = []

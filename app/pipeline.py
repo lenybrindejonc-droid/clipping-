@@ -6,12 +6,12 @@ import subprocess
 from pathlib import Path
 from typing import Callable
 
-from .reframe import crop_x_expression
+from . import reframe
 from .subtitles import write_ass
 
 Progress = Callable[[float, str], None]
 
-WHISPER_MODEL = os.getenv("WHISPER_MODEL", "small")
+WHISPER_MODEL = os.getenv("WHISPER_MODEL", "base")
 OUT_W, OUT_H = 1080, 1920
 
 _whisper = None
@@ -84,10 +84,13 @@ def transcribe(path: Path, progress: Progress, language: str | None = None) -> d
 
     if _whisper is None:
         progress(0.0, f"Chargement du modèle Whisper ({WHISPER_MODEL})…")
-        _whisper = WhisperModel(WHISPER_MODEL, device="auto", compute_type="int8")
+        _whisper = WhisperModel(WHISPER_MODEL, device="auto", compute_type="int8",
+                                cpu_threads=os.cpu_count() or 4)
 
     seg_iter, info = _whisper.transcribe(
-        load_audio(path), word_timestamps=True, vad_filter=True, language=language or None
+        load_audio(path), word_timestamps=True, vad_filter=True,
+        beam_size=1, condition_on_previous_text=False,  # ~2x plus rapide, qualité quasi identique
+        language=language or None
     )
     segments = []
     for s in seg_iter:
@@ -111,7 +114,7 @@ def render_clip(
     start: float,
     end: float,
     words: list[dict],
-    layout: str = "crop",
+    layout: str = "auto",
     subtitles: bool = True,
     hook: str | None = None,
 ) -> None:
@@ -120,17 +123,25 @@ def render_clip(
     src_w, src_h = probe_size(src)
     filters: list[str] = []
 
-    if layout == "crop" and src_w / src_h > OUT_W / OUT_H:
-        crop_w = int(src_h * OUT_W / OUT_H) // 2 * 2
-        x_expr = crop_x_expression(src, start, end, src_w, src_h, crop_w)
-        base = f"[0:v]crop=w={crop_w}:h={src_h}:x='{x_expr}':y=0,scale={OUT_W}:{OUT_H},setsar=1"
+    x_expr = None
+    crop_w = int(src_h * OUT_W / OUT_H) // 2 * 2
+    if layout in ("auto", "crop") and src_w / src_h > OUT_W / OUT_H:
+        x_expr = reframe.plan(src, start, end, src_w, crop_w)
+        if x_expr is None and layout == "crop":
+            x_expr = str((src_w - crop_w) // 2)  # recadrage centré forcé
+
+    sharpen = "unsharp=5:5:0.6:5:5:0"
+    if x_expr is not None:
+        base = (f"[0:v]crop=w={crop_w}:h={src_h}:x='{x_expr}':y=0,"
+                f"scale={OUT_W}:{OUT_H}:flags=lanczos,{sharpen},setsar=1")
     else:
-        # Fond flou + vidéo entière centrée
+        # Vidéo entière centrée (zoomée) sur fond flou — flou calculé en petit = rapide
         base = (
             f"[0:v]split[a][b];"
-            f"[a]scale={OUT_W}:{OUT_H}:force_original_aspect_ratio=increase,crop={OUT_W}:{OUT_H},"
-            f"boxblur=25:5,eq=brightness=-0.08[bg];"
-            f"[b]scale={OUT_W}:-2[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2,setsar=1"
+            f"[a]scale=270:480:force_original_aspect_ratio=increase,crop=270:480,"
+            f"boxblur=12:3,eq=brightness=-0.1,scale={OUT_W}:{OUT_H}[bg];"
+            f"[b]scale={OUT_W}*1.15:-2:flags=lanczos,crop={OUT_W}:ih,{sharpen}[fg];"
+            f"[bg][fg]overlay=(W-w)/2:(H-h)/2-80,setsar=1"
         )
     filters.append(base)
 
@@ -144,7 +155,7 @@ def render_clip(
         "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
         "-ss", f"{start:.3f}", "-t", f"{duration:.3f}", "-i", str(src.resolve()),
         "-filter_complex", vf, "-map", "[v]", "-map", "0:a?",
-        "-c:v", "libx264", "-preset", "veryfast", "-crf", "21", "-pix_fmt", "yuv420p",
+        "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p",
         "-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart",
         out.name,
     ]

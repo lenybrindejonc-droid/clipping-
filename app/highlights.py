@@ -145,13 +145,30 @@ def _snap(clips, segments, duration, min_d, max_d) -> list[dict]:
 def find_moments(segments, title, duration, n=8, min_d=20, max_d=60) -> tuple[list[dict], str]:
     if not segments:
         return [], "aucune parole détectée"
-    engine = "claude"
+    engine, note = "claude", ""
     try:
-        if not (os.getenv("ANTHROPIC_API_KEY") or os.getenv("ANTHROPIC_AUTH_TOKEN")):
-            raise RuntimeError("pas de clé API")
+        if not (os.getenv("ANTHROPIC_API_KEY") or "").startswith("sk-ant-"):
+            raise RuntimeError("aucune clé ANTHROPIC_API_KEY valide dans le fichier .env")
         clips = ask_claude(segments, title, n, min_d, max_d)
     except Exception as exc:  # repli hors-ligne
-        print(f"[highlights] Claude indisponible ({exc}), repli heuristique")
+        note = _explain(exc)
+        print(f"[highlights] Claude indisponible ({note}), repli heuristique")
         engine = "heuristique"
         clips = heuristic(segments, title, n, min_d, max_d)
-    return _snap(clips, segments, duration, min_d, max_d)[:n], engine
+    return _snap(clips, segments, duration, min_d, max_d)[:n], engine, note
+
+
+def _explain(exc: Exception) -> str:
+    import anthropic
+
+    if isinstance(exc, anthropic.AuthenticationError):
+        return "clé API refusée (vérifie qu'elle est complète dans .env)"
+    if isinstance(exc, anthropic.PermissionDeniedError):
+        return "accès refusé par l'API (compte ou clé)"
+    if isinstance(exc, anthropic.BadRequestError) and "credit" in str(exc).lower():
+        return "crédits épuisés : ajoute des crédits sur console.anthropic.com"
+    if isinstance(exc, anthropic.RateLimitError):
+        return "trop de requêtes, réessaie dans une minute"
+    if isinstance(exc, anthropic.APIConnectionError):
+        return "impossible de joindre l'API (connexion internet ?)"
+    return str(exc)[:200]

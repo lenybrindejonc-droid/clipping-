@@ -37,7 +37,7 @@ docker run -p 8000:8000 -e ANTHROPIC_API_KEY=sk-ant-... -v $(pwd)/data:/srv/data
 
 ## Réglages (variables d'environnement)
 
-Voir `.env.example` : `WHISPER_MODEL` (`small` par défaut ; `medium`/`large-v3` plus précis sur GPU),
+Voir `.env.example` : `WHISPER_MODEL` (`base` par défaut (rapide) ; `small`, `medium`, `large-v3` plus précis mais plus lents),
 `SUBTITLE_FONT`, `KEEP_SOURCE`, `WORKERS` (vidéos traitées en parallèle), `DATA_DIR`, `CLAUDE_MODEL`.
 
 ## Structure
