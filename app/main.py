@@ -122,7 +122,7 @@ def run_job(job_id: str) -> None:
     except Exception as exc:
         traceback.print_exc()
         msg = str(exc).strip().splitlines()[-1] if str(exc).strip() else exc.__class__.__name__
-        _update(job_id, status="error", message=f"Erreur : {msg}")
+        _update(job_id, status="error", message=f"Erreur : {pipeline._strip(msg)}")
 
 
 @app.post("/api/jobs")

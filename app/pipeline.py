@@ -19,6 +19,12 @@ X264_PRESET = os.getenv("X264_PRESET") or ("superfast" if (os.cpu_count() or 4) 
 _whisper = None
 
 
+def _strip(text: str) -> str:
+    """Retire les codes couleur du terminal des messages d'erreur."""
+    import re
+    return re.sub(r"\x1b\[[0-9;]*m|\[[0-9;]*m", "", text).replace("ERROR:", "").strip()
+
+
 def download(url: str, workdir: Path, progress: Progress) -> dict:
     """Télécharge la vidéo YouTube (≤1080p) en mp4."""
     import yt_dlp
@@ -29,17 +35,38 @@ def download(url: str, workdir: Path, progress: Progress) -> dict:
             if total:
                 progress(d.get("downloaded_bytes", 0) / total, "Téléchargement de la vidéo…")
 
-    opts = {
-        "format": "bv*[height<=1080][ext=mp4]+ba[ext=m4a]/b[height<=1080][ext=mp4]/bv*[height<=1080]+ba/b",
-        "merge_output_format": "mp4",
-        "outtmpl": str(workdir / "source.%(ext)s"),
-        "noplaylist": True,
-        "quiet": True,
-        "no_warnings": True,
-        "progress_hooks": [hook],
-    }
-    with yt_dlp.YoutubeDL(opts) as ydl:
-        info = ydl.extract_info(url, download=True)
+    # Ordre de préférence : H.264 (décodage léger, même sur petit PC), puis fichier unique sans
+    # fusion (si la fusion ffmpeg échoue), puis n'importe quoi.
+    formats = [
+        "bv*[vcodec^=avc1][height<=1080]+ba[ext=m4a]/b[vcodec^=avc1][height<=1080]",
+        "b[ext=mp4][height<=1080]/18/b",
+    ]
+    last_exc: Exception | None = None
+    for fmt in formats:
+        for f in workdir.glob("source.*"):
+            f.unlink()
+        opts = {
+            "format": fmt,
+            "merge_output_format": "mp4",
+            "outtmpl": str(workdir / "source.%(ext)s"),
+            "noplaylist": True,
+            "quiet": True,
+            "no_warnings": True,
+            "no_color": True,
+            "progress_hooks": [hook],
+        }
+        try:
+            with yt_dlp.YoutubeDL(opts) as ydl:
+                info = ydl.extract_info(url, download=True)
+            break
+        except yt_dlp.utils.DownloadError as exc:
+            last_exc = exc
+            print(f"[download] échec avec le format {fmt!r} : {exc}")
+            if "Sign in" in str(exc) or "Private video" in str(exc) or "unavailable" in str(exc):
+                raise
+    else:
+        raise RuntimeError(f"téléchargement impossible ({_strip(str(last_exc))}). "
+                           "Vérifie l'espace disque libre (commande : df -h ~)")
     path = next(workdir.glob("source.*"))
     return {
         "path": path,
