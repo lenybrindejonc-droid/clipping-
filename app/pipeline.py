@@ -13,6 +13,8 @@ Progress = Callable[[float, str], None]
 
 WHISPER_MODEL = os.getenv("WHISPER_MODEL", "base")
 OUT_W, OUT_H = 1080, 1920
+# Petits processeurs (≤ 2 cœurs) : encodage plus rapide, fichier un peu plus gros
+X264_PRESET = os.getenv("X264_PRESET") or ("superfast" if (os.cpu_count() or 4) <= 2 else "veryfast")
 
 _whisper = None
 
@@ -77,7 +79,21 @@ def load_audio(path: Path):
     return np.frombuffer(out.stdout, np.int16).astype(np.float32) / 32768.0
 
 
-def transcribe(path: Path, progress: Progress, language: str | None = None) -> dict:
+def transcribe(path: Path, progress: Progress, language: str | None = None,
+               duration: float | None = None) -> dict:
+    """Transcription en ligne (Groq) si une clé est configurée, sinon locale."""
+    from . import cloud_transcribe
+
+    if cloud_transcribe.available():
+        try:
+            return cloud_transcribe.transcribe(path, duration or probe_duration(path), progress, language)
+        except Exception as exc:
+            print(f"[transcribe] Groq indisponible ({exc}), transcription locale")
+            progress(0.0, f"Transcription en ligne impossible ({exc}) → transcription locale (lente)…")
+    return transcribe_local(path, progress, language)
+
+
+def transcribe_local(path: Path, progress: Progress, language: str | None = None) -> dict:
     """Transcription Whisper locale avec horodatage au mot près."""
     global _whisper
     from faster_whisper import WhisperModel
@@ -155,7 +171,7 @@ def render_clip(
         "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
         "-ss", f"{start:.3f}", "-t", f"{duration:.3f}", "-i", str(src.resolve()),
         "-filter_complex", vf, "-map", "[v]", "-map", "0:a?",
-        "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p",
+        "-c:v", "libx264", "-preset", X264_PRESET, "-threads", "0", "-crf", "20", "-pix_fmt", "yuv420p",
         "-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart",
         out.name,
     ]

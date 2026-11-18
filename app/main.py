@@ -89,7 +89,8 @@ def run_job(job_id: str) -> None:
         info = pipeline.download(req["url"], work, _progress(job_id, "download"))
         _update(job_id, title=info["title"], channel=info["channel"], duration=info["duration"])
 
-        tr = pipeline.transcribe(info["path"], _progress(job_id, "transcribe"), req.get("language"))
+        tr = pipeline.transcribe(info["path"], _progress(job_id, "transcribe"), req.get("language"),
+                                 info["duration"])
         (work / "transcript.json").write_text(json.dumps(tr, ensure_ascii=False))
 
         _progress(job_id, "analyze")(0, "L'IA cherche les moments les plus viraux…")
