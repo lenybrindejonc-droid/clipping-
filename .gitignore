@@ -4,3 +4,4 @@ __pycache__/
 .env
 .venv/
 cookies.txt
+.deploy_vps.conf

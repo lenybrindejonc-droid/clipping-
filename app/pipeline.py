@@ -28,7 +28,7 @@ def _strip(text: str) -> str:
 def _cookie_file() -> str | None:
     """Cookies YouTube (fichier cookies.txt ou secret YT_COOKIES) : aident quand YouTube
     bloque les serveurs (« Sign in to confirm you're not a bot »)."""
-    content = os.getenv("YT_COOKIES", "").strip()
+    content = os.getenv("YT_COOKIES", "").replace("\\n", "\n").strip()
     if content:
         path = Path(os.getenv("DATA_DIR", "data")) / "cookies.txt"
         path.parent.mkdir(parents=True, exist_ok=True)

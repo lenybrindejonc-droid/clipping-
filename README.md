@@ -58,6 +58,24 @@ static/            interface web
 - Publication directe via les API TikTok / YouTube.
 - Comptes utilisateurs + file de tâches (Redis/Celery) pour un déploiement public.
 
+## Mettre en ligne sur un serveur VPS (recommandé)
+
+Un serveur à ~4-6 €/mois (Hetzner, OVH, Scaleway…) : 3 à 5× plus rapide que la plupart des
+petits PC, clips conservés, site accessible depuis le téléphone.
+
+1. Crée un serveur (2 vCPU / 4 Go, Ubuntu 24.04) et note son adresse IP.
+2. Depuis le projet :
+
+```bash
+./deploy_vps.sh
+```
+
+Le script installe Docker sur le serveur, y copie le code, écrit le `.env` (clés + mot de passe
+du site) et démarre le tout derrière **Caddy**, qui obtient un certificat HTTPS gratuit pour
+`<ton-ip>.sslip.io` — aucun nom de domaine à acheter. Relance la même commande pour mettre à jour.
+
+Le site est protégé par le mot de passe demandé lors du déploiement (`APP_PASSWORD`).
+
 ## Mettre en ligne sur Hugging Face (privé — abonnement PRO requis)
 
 ⚠️ Depuis 2026, Hugging Face réserve les Docker Spaces aux comptes PRO (~9 $/mois) ;
