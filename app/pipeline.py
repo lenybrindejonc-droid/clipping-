@@ -40,6 +40,13 @@ def _cookie_file() -> str | None:
     return str(local) if local.exists() else None
 
 
+# Les « clients » que yt-dlp imite. Depuis un serveur, YouTube coupe souvent le client « web » :
+# on essaie plusieurs identités avant d'abandonner.
+PLAYER_CLIENTS = [c.strip() for c in os.getenv("YT_PLAYER_CLIENTS", "tv,ios,web_safari,android").split(",") if c.strip()]
+NETWORK_ERRORS = ("UNEXPECTED_EOF", "SSLError", "Unable to download API page", "Remote end closed",
+                  "Connection reset", "timed out", "Failed to extract any player response")
+
+
 def download(url: str, workdir: Path, progress: Progress, high_quality: bool = False) -> dict:
     """Télécharge la vidéo YouTube (≤1080p) en mp4."""
     import yt_dlp
@@ -72,7 +79,15 @@ def download(url: str, workdir: Path, progress: Progress, high_quality: bool = F
             "no_warnings": True,
             "no_color": True,
             "progress_hooks": [hook],
+            # Réseau : réessais et temps d'attente généreux (les serveurs se font souvent couper)
+            "socket_timeout": 30,
+            "retries": 5,
+            "fragment_retries": 10,
+            "extractor_retries": 5,
+            "extractor_args": {"youtube": {"player_client": PLAYER_CLIENTS}},
         }
+        if os.getenv("YT_FORCE_IPV4", "1") == "1":
+            opts["source_address"] = "0.0.0.0"  # l'IPv6 des serveurs est souvent cassée côté YouTube
         if cookies := _cookie_file():
             opts["cookiefile"] = cookies
         try:
@@ -89,7 +104,13 @@ def download(url: str, workdir: Path, progress: Progress, high_quality: bool = F
             if "Private video" in str(exc) or "unavailable" in str(exc):
                 raise
     else:
-        raise RuntimeError(f"téléchargement impossible ({_strip(str(last_exc))}). "
+        msg = _strip(str(last_exc))
+        if any(e in msg for e in NETWORK_ERRORS):
+            raise RuntimeError(
+                "YouTube refuse la connexion depuis ce serveur (connexion coupée). "
+                "Solution : des cookies YouTube d'un compte secondaire — voir README, "
+                "section « YouTube bloque »") from last_exc
+        raise RuntimeError(f"téléchargement impossible ({msg}). "
                            "Vérifie l'espace disque libre (commande : df -h ~)")
     path = next(workdir.glob("source.*"))
     return {

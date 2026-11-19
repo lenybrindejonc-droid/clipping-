@@ -67,7 +67,7 @@ def main() -> None:
     for k, v in secrets.items():
         if v:
             api.add_space_secret(repo_id, k, v)
-    for k in ("CLAUDE_MODEL",):
+    for k in ("CLAUDE_MODEL", "YT_PLAYER_CLIENTS"):
         if env.get(k):
             api.add_space_variable(repo_id, k, env[k])
     api.add_space_variable(repo_id, "TRANSCRIBE_FALLBACK", "1")  # serveur plus puissant : repli local OK
