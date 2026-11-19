@@ -11,20 +11,22 @@ if [ ! -d .venv ]; then echo "Lance d'abord ./install.sh"; exit 1; fi
 export PATH="$HOME/.local/bin:$PATH"
 command -v deno >/dev/null 2>&1 || ./install_deno.sh >/dev/null 2>&1 || true
 
-# Cherche cookies.txt aux endroits habituels (y compris les Téléchargements de ChromeOS)
+# Cherche un fichier de cookies (l'extension le nomme souvent www.youtube.com_cookies.txt)
+find_cookies() {
+  ls -t cookies.txt ./*cookies*.txt "$HOME"/*cookies*.txt "$HOME"/Downloads/*cookies*.txt \
+     /mnt/chromeos/MyFiles/Downloads/*cookies*.txt \
+     /mnt/chromeos/MyFiles/Téléchargements/*cookies*.txt \
+     /mnt/chromeos/MyFiles/*/*cookies*.txt 2>/dev/null | head -1
+}
+
 COOKIES=()
-for c in cookies.txt "$HOME/cookies.txt" "$HOME/Downloads/cookies.txt" \
-         /mnt/chromeos/MyFiles/Downloads/cookies.txt \
-         /mnt/chromeos/MyFiles/Téléchargements/cookies.txt; do
-  if [ -f "$c" ]; then
-    cp -f "$c" cookies.txt 2>/dev/null || true
-    COOKIES=(--cookies cookies.txt)
-    echo "🍪 Cookies trouvés : $c"
-    break
-  fi
-done
-if [ ${#COOKIES[@]} -eq 0 ]; then
-  echo "ℹ️  Aucun fichier cookies.txt trouvé — on essaie sans."
+found=$(find_cookies)
+if [ -n "$found" ]; then
+  [ "$found" != "cookies.txt" ] && cp -f "$found" cookies.txt
+  COOKIES=(--cookies cookies.txt)
+  echo "🍪 Cookies trouvés : $found"
+else
+  echo "ℹ️  Aucun fichier de cookies trouvé — on essaie sans."
 fi
 
 mkdir -p ~/videos

@@ -10,18 +10,24 @@ echo "================ BILAN ================"
 echo "yt-dlp   : $($YTDLP --version 2>/dev/null || echo ABSENT)"
 echo "deno     : $(deno --version 2>/dev/null | head -1 || echo ABSENT)"
 
-echo "--- cookies.txt ---"
-found=""
-for c in cookies.txt "$HOME/cookies.txt" "$HOME/Downloads/cookies.txt" \
-         /mnt/chromeos/MyFiles/Downloads/cookies.txt \
-         /mnt/chromeos/MyFiles/Téléchargements/cookies.txt; do
-  if [ -f "$c" ]; then
-    echo "trouvé   : $c ($(wc -l < "$c") lignes, $(grep -ci youtube "$c") lignes youtube)"
-    grep -qi "SID\|LOGIN_INFO" "$c" && echo "session  : OUI (connecté)" || echo "session  : NON (pas connecté lors de l'export)"
-    found="$c"; break
-  fi
-done
-[ -z "$found" ] && echo "trouvé   : AUCUN"
+echo "--- cookies ---"
+# Cherche un fichier de cookies (l'extension le nomme souvent www.youtube.com_cookies.txt)
+find_cookies() {
+  ls -t cookies.txt ./*cookies*.txt "$HOME"/*cookies*.txt "$HOME"/Downloads/*cookies*.txt \
+     /mnt/chromeos/MyFiles/Downloads/*cookies*.txt \
+     /mnt/chromeos/MyFiles/Téléchargements/*cookies*.txt \
+     /mnt/chromeos/MyFiles/*/*cookies*.txt 2>/dev/null | head -1
+}
+found=$(find_cookies)
+if [ -n "$found" ]; then
+  echo "trouvé   : $found ($(wc -l < "$found") lignes, $(grep -ci youtube "$found") lignes youtube)"
+  grep -qi "SID\|LOGIN_INFO" "$found" && echo "session  : OUI (connecté)" || echo "session  : NON (pas connecté lors de l'export)"
+else
+  echo "trouvé   : AUCUN"
+  echo "fichiers .txt visibles dans les Téléchargements :"
+  ls -t "$HOME"/Downloads/*.txt /mnt/chromeos/MyFiles/Downloads/*.txt \
+     /mnt/chromeos/MyFiles/Téléchargements/*.txt 2>/dev/null | head -5 || echo "  (aucun)"
+fi
 echo "partage ChromeOS : $([ -d /mnt/chromeos ] && echo OUI || echo NON)"
 
 echo "--- test des identités (lecture des infos seulement) ---"
