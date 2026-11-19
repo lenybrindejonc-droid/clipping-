@@ -47,6 +47,18 @@
           <label class="check"><input id="hq" type="checkbox" checked /> Qualité max 1440p (plus lent)</label>
         </div>
       </details>
+      <div class="or"><span>ou</span></div>
+      <div class="upload">
+        <label class="file-label">
+          <input id="file" type="file" accept="video/*" hidden />
+          <span class="btn ghost">📁 Choisir une vidéo sur mon ordinateur</span>
+        </label>
+        <p id="file-name" class="muted small" hidden></p>
+        <button id="send-file" type="button" class="btn" hidden>Envoyer et générer les shorts</button>
+        <div id="up-bar" class="bar" hidden><div id="up-fill"></div></div>
+        <p class="muted small">À utiliser si YouTube bloque le serveur : télécharge la vidéo sur ton
+          ordinateur, puis envoie-la ici.</p>
+      </div>
       <p id="error" class="error" hidden></p>
     </form>
   </header>

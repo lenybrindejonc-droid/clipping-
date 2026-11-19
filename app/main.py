@@ -18,7 +18,7 @@ import hashlib
 import hmac
 from urllib.parse import parse_qs
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -85,7 +85,7 @@ YOUTUBE = re.compile(r"^https?://(www\.|m\.)?(youtube\.com|youtu\.be)/", re.I)
 
 
 class JobRequest(BaseModel):
-    url: str
+    url: str | None = None
     num_clips: int = Field(5, ge=1, le=20)
     min_duration: int = Field(15, ge=5, le=120)
     max_duration: int = Field(40, ge=10, le=180)
@@ -160,8 +160,13 @@ def run_job(job_id: str) -> None:
     t0 = time.time()
     _update(job_id, status="download", progress=1, message="Démarrage du téléchargement…")
     try:
-        info = pipeline.download(req["url"], work, _progress(job_id, "download"),
-                                 req.get("high_quality", False))
+        if req.get("url"):
+            info = pipeline.download(req["url"], work, _progress(job_id, "download"),
+                                     req.get("high_quality", False))
+        else:  # vidéo envoyée depuis l'ordinateur
+            path = next(work.glob("source.*"))
+            info = {"path": path, "title": req.get("filename") or "Vidéo envoyée",
+                    "duration": pipeline.probe_duration(path), "channel": ""}
         t0 = _chrono("téléchargement", t0)
         _update(job_id, title=info["title"], channel=info["channel"], duration=info["duration"])
 
@@ -207,7 +212,7 @@ def run_job(job_id: str) -> None:
         _update(job_id, status="error", message=f"Erreur : {pipeline._strip(msg)}")
     finally:
         # En cas d'échec, supprime la vidéo source (sinon on la garde pour les modifications)
-        if not ok and os.getenv("KEEP_SOURCE", "0") != "1":
+        if not ok and req.get("url") and os.getenv("KEEP_SOURCE", "0") != "1":
             for f in work.glob("source*"):
                 f.unlink(missing_ok=True)
         for f in work.glob("*.ass"):
@@ -283,6 +288,8 @@ def rerender_clip(job_id: str, n: int, edit: dict) -> None:
     clip = job["clips"][n]
     try:
         src = next((f for f in work.glob("source.*") if f.suffix in (".mp4", ".mkv", ".webm")), None)
+        if src is None and not req.get("url"):
+            raise RuntimeError("la vidéo envoyée n'est plus sur le serveur : renvoie-la pour modifier ce clip")
         if src is None:
             _set_clip(job_id, n, rendering="Re-téléchargement de la vidéo…")
             _clean_sources(keep=job_id)
@@ -337,23 +344,60 @@ def edit_clip(job_id: str, n: int, edit: ClipEdit):
     return jobs[job_id]
 
 
-@app.post("/api/jobs")
-def create_job(req: JobRequest):
-    if not YOUTUBE.match(req.url.strip()):
-        raise HTTPException(400, "Colle un lien YouTube valide.")
+def _new_job(req: JobRequest, extra: dict | None = None) -> dict:
     if req.min_duration >= req.max_duration:
         raise HTTPException(400, "La durée min doit être inférieure à la durée max.")
     job_id = uuid.uuid4().hex[:10]
     (JOBS / job_id).mkdir(parents=True)
     job = {
-        "id": job_id, "request": req.model_dump() | {"url": req.url.strip()},
+        "id": job_id, "request": req.model_dump() | (extra or {}),
         "status": "queued", "progress": 0, "message": "En file d'attente…",
-        "title": None, "clips": [], "created_at": time.time(), "updated_at": time.time(),
+        "title": extra.get("filename") if extra else None,
+        "clips": [], "created_at": time.time(), "updated_at": time.time(),
     }
     with lock:
         jobs[job_id] = job
         _save(job)
-    futures[job_id] = executor.submit(run_job, job_id)
+    return job
+
+
+@app.post("/api/jobs")
+def create_job(req: JobRequest):
+    if not req.url or not YOUTUBE.match(req.url.strip()):
+        raise HTTPException(400, "Colle un lien YouTube valide.")
+    job = _new_job(req, {"url": req.url.strip()})
+    futures[job["id"]] = executor.submit(run_job, job["id"])
+    return job
+
+
+VIDEO_EXT = {".mp4", ".mkv", ".webm", ".mov", ".m4v", ".avi"}
+
+
+@app.post("/api/jobs/upload")
+async def create_upload_job(params: str = Form(...), file: UploadFile = File(...)):
+    """Vidéo envoyée depuis l'ordinateur (quand YouTube bloque le serveur)."""
+    try:
+        req = JobRequest.model_validate_json(params)
+    except Exception:
+        raise HTTPException(400, "Paramètres invalides.")
+    name = Path(file.filename or "video.mp4").name
+    ext = Path(name).suffix.lower()
+    if ext not in VIDEO_EXT:
+        raise HTTPException(400, f"Format non reconnu ({ext or 'sans extension'}). "
+                                 "Envoie un fichier .mp4, .mkv, .webm ou .mov.")
+    job = _new_job(req, {"url": None, "filename": Path(name).stem[:120]})
+    dest = JOBS / job["id"] / f"source{ext}"
+    try:
+        with dest.open("wb") as out:
+            while chunk := await file.read(4 << 20):
+                out.write(chunk)
+    except Exception as exc:
+        shutil.rmtree(JOBS / job["id"], ignore_errors=True)
+        with lock:
+            jobs.pop(job["id"], None)
+        msg = "disque plein" if "space" in str(exc).lower() else str(exc)
+        raise HTTPException(500, f"Envoi interrompu ({msg}).")
+    futures[job["id"]] = executor.submit(run_job, job["id"])
     return job
 
 

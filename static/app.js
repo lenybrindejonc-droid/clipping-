@@ -9,6 +9,73 @@ const STATUS_LABEL = {
 
 const fmt = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 
+function params() {
+  return {
+    num_clips: +$("num").value,
+    min_duration: +$("min").value,
+    max_duration: +$("max").value,
+    layout: $("layout").value,
+    subtitles: $("subs").checked,
+    high_quality: $("hq").checked,
+    language: $("lang").value || null,
+  };
+}
+
+function showError(msg) {
+  $("error").textContent = msg;
+  $("error").hidden = false;
+}
+
+// --- Envoi d'un fichier depuis l'ordinateur
+$("file").addEventListener("change", () => {
+  const f = $("file").files[0];
+  $("file-name").hidden = !f;
+  $("send-file").hidden = !f;
+  if (f) $("file-name").textContent = `${f.name} — ${(f.size / 1048576).toFixed(0)} Mo`;
+});
+
+$("send-file").addEventListener("click", () => {
+  const f = $("file").files[0];
+  if (!f) return;
+  $("error").hidden = true;
+  $("send-file").disabled = true;
+  $("up-bar").hidden = false;
+
+  const data = new FormData();
+  data.append("params", JSON.stringify(params()));
+  data.append("file", f);
+
+  const xhr = new XMLHttpRequest();
+  xhr.open("POST", "/api/jobs/upload");
+  xhr.upload.onprogress = (e) => {
+    if (e.lengthComputable) {
+      const pct = (e.loaded / e.total) * 100;
+      $("up-fill").style.width = `${pct}%`;
+      $("file-name").textContent = `Envoi… ${pct.toFixed(0)} %`;
+    }
+  };
+  xhr.onload = () => {
+    $("send-file").disabled = false;
+    $("up-bar").hidden = true;
+    $("up-fill").style.width = "0%";
+    let data2 = {};
+    try { data2 = JSON.parse(xhr.responseText); } catch (_) {}
+    if (xhr.status >= 200 && xhr.status < 300) {
+      $("file-name").textContent = "Envoi terminé ✓";
+      openJob(data2.id);
+      loadHistory();
+    } else {
+      showError(typeof data2.detail === "string" ? data2.detail : "L'envoi a échoué.");
+    }
+  };
+  xhr.onerror = () => {
+    $("send-file").disabled = false;
+    $("up-bar").hidden = true;
+    showError("L'envoi a échoué (connexion interrompue). Réessaie.");
+  };
+  xhr.send(data);
+});
+
 $("form").addEventListener("submit", async (e) => {
   e.preventDefault();
   $("error").hidden = true;
@@ -17,24 +84,14 @@ $("form").addEventListener("submit", async (e) => {
     const res = await fetch("/api/jobs", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        url: $("url").value,
-        num_clips: +$("num").value,
-        min_duration: +$("min").value,
-        max_duration: +$("max").value,
-        layout: $("layout").value,
-        subtitles: $("subs").checked,
-        high_quality: $("hq").checked,
-        language: $("lang").value || null,
-      }),
+      body: JSON.stringify({ url: $("url").value, ...params() }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(typeof data.detail === "string" ? data.detail : "Paramètres invalides.");
     openJob(data.id);
     loadHistory();
   } catch (err) {
-    $("error").textContent = err.message;
-    $("error").hidden = false;
+    showError(err.message);
   } finally {
     $("go").disabled = false;
   }
@@ -62,7 +119,7 @@ async function poll() {
 }
 
 function render(job) {
-  $("job-title").textContent = job.title || job.request.url;
+  $("job-title").textContent = job.title || job.request.url || "Vidéo envoyée";
   $("bar-fill").style.width = `${job.progress || 0}%`;
   $("job-msg").textContent = `${STATUS_LABEL[job.status] || job.status} — ${job.message || ""}`;
   const engine = $("job-engine");
@@ -202,7 +259,7 @@ async function loadHistory() {
     const li = document.createElement("li");
     const t = document.createElement("span");
     t.className = "h-title";
-    t.textContent = job.title || job.request.url;
+    t.textContent = job.title || job.request.url || "Vidéo envoyée";
     const s = document.createElement("span");
     s.className = "muted";
     s.textContent = job.status === "done" ? `${job.clips.length} clips` : STATUS_LABEL[job.status];

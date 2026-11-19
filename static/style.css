@@ -9,6 +9,7 @@
   --radius: 16px;
 }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }   /* sinon les .btn cachés restent affichés */
 body {
   margin: 0; background: var(--bg); color: var(--text);
   font: 16px/1.5 Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
@@ -88,3 +89,10 @@ h3 { color: var(--muted); font-size: 14px; text-transform: uppercase; letter-spa
 .step { padding: 8px 10px; font-size: 13px; background: #23232e; }
 .small { font-size: 12px; margin: 0; }
 .clip-error { margin: 0; }
+.or { display: flex; align-items: center; gap: 12px; color: var(--muted); font-size: 13px; margin: 14px 0; }
+.or::before, .or::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+.upload { display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
+.file-label { width: 100%; }
+.file-label .btn { width: 100%; }
+#up-bar { width: 100%; }
+#up-fill { height: 100%; width: 0; background: linear-gradient(90deg, var(--accent), var(--accent2)); transition: width .2s; }

@@ -90,6 +90,12 @@ crée un Space **privé**, copie tes clés Claude/Groq du fichier `.env` dans le
 (jamais dans le code), propose un mot de passe pour le site, puis envoie le code.
 Relance la même commande pour mettre le site à jour.
 
+### Envoyer une vidéo depuis son ordinateur
+
+Si YouTube refuse le téléchargement depuis le serveur, utilise le bouton
+**« Choisir une vidéo sur mon ordinateur »** sur la page : télécharge la vidéo là où ça marche
+(ton PC), puis envoie le fichier au site. Formats acceptés : mp4, mkv, webm, mov, m4v, avi.
+
 ### YouTube bloque (« Sign in to confirm you're not a bot »)
 
 YouTube bloque souvent les serveurs. Solution : des cookies d'un compte YouTube **secondaire**.
