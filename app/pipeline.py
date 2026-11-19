@@ -1,8 +1,13 @@
 """Étapes techniques : téléchargement, transcription, rendu vertical."""
 from __future__ import annotations
 
+import json
 import os
+import shlex
 import subprocess
+import sys
+import threading
+import time
 from pathlib import Path
 from typing import Callable
 
@@ -43,82 +48,112 @@ def _cookie_file() -> str | None:
 # Les « clients » que yt-dlp imite. Depuis un serveur, YouTube coupe souvent le client « web » :
 # on essaie plusieurs identités avant d'abandonner.
 PLAYER_CLIENTS = [c.strip() for c in os.getenv("YT_PLAYER_CLIENTS", "tv,ios,web_safari,android").split(",") if c.strip()]
-NETWORK_ERRORS = ("UNEXPECTED_EOF", "SSLError", "Unable to download API page", "Remote end closed",
+YTDLP_CMD = shlex.split(os.getenv("YTDLP_CMD", "")) or [sys.executable, "-m", "yt_dlp"]
+DOWNLOAD_TIMEOUT = int(os.getenv("DOWNLOAD_TIMEOUT", "1200"))  # 20 minutes maximum
+NETWORK_ERRORS = ("TIMEOUT", "UNEXPECTED_EOF", "SSLError", "Unable to download API page", "Remote end closed",
                   "Connection reset", "timed out", "Failed to extract any player response")
 
 
 def download(url: str, workdir: Path, progress: Progress, high_quality: bool = False) -> dict:
-    """Télécharge la vidéo YouTube (≤1080p) en mp4."""
-    import yt_dlp
+    """Télécharge la vidéo YouTube (≤1080p) en mp4.
 
-    def hook(d):
-        if d.get("status") == "downloading":
-            total = d.get("total_bytes") or d.get("total_bytes_estimate") or 0
-            if total:
-                progress(d.get("downloaded_bytes", 0) / total, "Téléchargement de la vidéo…")
-
-    # Ordre de préférence : H.264 (décodage léger, même sur petit PC), puis fichier unique sans
-    # fusion (si la fusion ffmpeg échoue), puis n'importe quoi.
+    yt-dlp tourne dans un processus séparé : on peut donc l'arrêter net s'il dépasse
+    DOWNLOAD_TIMEOUT, au lieu de bloquer le site pour toujours.
+    """
     formats = [
         "bv*[vcodec^=avc1][height<=1080]+ba[ext=m4a]/b[vcodec^=avc1][height<=1080]",
         "b[ext=mp4][height<=1080]/18/b",
     ]
     if high_quality:
-        # 1440p (VP9/AV1) : image bien plus nette après zoom, mais plus long à traiter
-        formats.insert(0, "bv*[vcodec^=vp09][height<=1440][height>1080]+ba/bv*[vcodec^=vp9][height<=1440][height>1080]+ba")
-    last_exc: Exception | None = None
+        formats.insert(0, "bv*[vcodec^=vp09][height<=1440][height>1080]+ba/"
+                          "bv*[vcodec^=vp9][height<=1440][height>1080]+ba")
+
+    deadline = time.monotonic() + DOWNLOAD_TIMEOUT
+    last_err = ""
     for fmt in formats:
         for f in workdir.glob("source.*"):
             f.unlink()
-        opts = {
-            "format": fmt,
-            "merge_output_format": "mp4",
-            "outtmpl": str(workdir / "source.%(ext)s"),
-            "noplaylist": True,
-            "quiet": True,
-            "no_warnings": True,
-            "no_color": True,
-            "progress_hooks": [hook],
-            # Réseau : réessais et temps d'attente généreux (les serveurs se font souvent couper)
-            "socket_timeout": 20,
-            "retries": 3,
-            "fragment_retries": 5,
-            "extractor_retries": 2,
-            "extractor_args": {"youtube": {"player_client": PLAYER_CLIENTS}},
-        }
-        if os.getenv("YT_FORCE_IPV4", "1") == "1":
-            opts["source_address"] = "0.0.0.0"  # l'IPv6 des serveurs est souvent cassée côté YouTube
-        if cookies := _cookie_file():
-            opts["cookiefile"] = cookies
+        remaining = deadline - time.monotonic()
+        if remaining < 30:
+            raise RuntimeError(f"téléchargement trop long (plus de {max(1, DOWNLOAD_TIMEOUT // 60)} minutes) "
+                               "— YouTube ne répond pas correctement depuis ce serveur")
+        info, err = _run_ytdlp(url, workdir, fmt, progress, remaining)
+        if info:
+            path = next(workdir.glob("source.*"))
+            return {
+                "path": path,
+                "title": info.get("title") or "Vidéo",
+                "duration": float(info.get("duration") or probe_duration(path)),
+                "channel": info.get("channel") or info.get("uploader") or "",
+            }
+        last_err = err
+        print(f"[download] échec avec le format {fmt!r} : {err[:400]}", flush=True)
+        if "Sign in" in err or "not a bot" in err:
+            raise RuntimeError("YouTube bloque le téléchargement depuis ce serveur. Ajoute des "
+                               "cookies YouTube (voir README, section « YouTube bloque »)")
+        if "Private video" in err or "Video unavailable" in err or "members-only" in err:
+            raise RuntimeError(f"vidéo inaccessible ({_strip(err.splitlines()[-1] if err else '')})")
+
+    if any(e in last_err for e in NETWORK_ERRORS):
+        raise RuntimeError("YouTube refuse la connexion depuis ce serveur (connexion coupée). "
+                           "Solution : des cookies YouTube d'un compte secondaire — voir README, "
+                           "section « YouTube bloque »")
+    raise RuntimeError(f"téléchargement impossible ({_strip(last_err.splitlines()[-1] if last_err else '')})")
+
+
+def _run_ytdlp(url: str, workdir: Path, fmt: str, progress: Progress,
+               timeout: float) -> tuple[dict | None, str]:
+    """Lance yt-dlp. Renvoie (infos, "") si ça marche, (None, erreur) sinon."""
+    cmd = [*YTDLP_CMD,
+           "-f", fmt, "--merge-output-format", "mp4",
+           "-o", str(workdir / "source.%(ext)s"),
+           "--no-playlist", "--no-color", "--newline", "--no-warnings",
+           "--progress-template", "PCT:%(progress._percent_str)s",
+           "--print-json", "--no-simulate",
+           "--socket-timeout", "20", "--retries", "3", "--fragment-retries", "5",
+           "--extractor-retries", "2",
+           "--extractor-args", f"youtube:player_client={','.join(PLAYER_CLIENTS)}"]
+    if os.getenv("YT_FORCE_IPV4", "1") == "1":
+        cmd.append("--force-ipv4")
+    if cookies := _cookie_file():
+        cmd += ["--cookies", cookies]
+    cmd.append(url)
+
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                            text=True, errors="replace", bufsize=1)
+    info: dict | None = None
+    killed = False
+
+    def watchdog() -> None:
+        nonlocal killed
         try:
-            with yt_dlp.YoutubeDL(opts) as ydl:
-                info = ydl.extract_info(url, download=True)
-            break
-        except yt_dlp.utils.DownloadError as exc:
-            last_exc = exc
-            print(f"[download] échec avec le format {fmt!r} : {exc}")
-            if "Sign in" in str(exc) or "not a bot" in str(exc):
-                raise RuntimeError(
-                    "YouTube bloque le téléchargement depuis ce serveur. Ajoute des cookies YouTube "
-                    "(voir README, section « YouTube bloque »)") from exc
-            if "Private video" in str(exc) or "unavailable" in str(exc):
-                raise
-    else:
-        msg = _strip(str(last_exc))
-        if any(e in msg for e in NETWORK_ERRORS):
-            raise RuntimeError(
-                "YouTube refuse la connexion depuis ce serveur (connexion coupée). "
-                "Solution : des cookies YouTube d'un compte secondaire — voir README, "
-                "section « YouTube bloque »") from last_exc
-        raise RuntimeError(f"téléchargement impossible ({msg}). "
-                           "Vérifie l'espace disque libre (commande : df -h ~)")
-    path = next(workdir.glob("source.*"))
-    return {
-        "path": path,
-        "title": info.get("title") or "Vidéo",
-        "duration": float(info.get("duration") or probe_duration(path)),
-        "channel": info.get("channel") or info.get("uploader") or "",
-    }
+            proc.wait(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            killed = True
+            proc.kill()
+
+    timer = threading.Thread(target=watchdog, daemon=True)
+    timer.start()
+    for line in proc.stdout:
+        line = line.strip()
+        if line.startswith("PCT:"):
+            try:
+                progress(min(float(line[4:].strip().rstrip("%")) / 100, 1.0),
+                         "Téléchargement de la vidéo…")
+            except ValueError:
+                pass
+        elif line.startswith("{"):
+            try:
+                info = json.loads(line)
+            except json.JSONDecodeError:
+                pass
+    err = proc.stderr.read()
+    proc.wait()
+    if killed:
+        return None, f"TIMEOUT: arrêté après {timeout / 60:.0f} minutes"
+    if proc.returncode != 0 or info is None:
+        return None, err or f"yt-dlp s'est arrêté (code {proc.returncode})"
+    return info, ""
 
 
 def probe_duration(path: Path) -> float:

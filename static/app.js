@@ -72,6 +72,15 @@ function render(job) {
   note.hidden = !job.engine_note;
   note.textContent = job.engine_note ? `⚠️ Claude n'a pas été utilisé : ${job.engine_note}. Les moments ont été choisis par une méthode basique, bien moins bonne.` : "";
 
+  const cancel = $("cancel-job");
+  cancel.hidden = job.status !== "queued";
+  cancel.onclick = async () => {
+    cancel.disabled = true;
+    const res = await fetch(`/api/jobs/${job.id}`, { method: "DELETE" });
+    if (res.ok) { clearTimeout(pollTimer); $("current").hidden = true; history.replaceState(null, "", "#"); loadHistory(); }
+    else { alert((await res.json()).detail || "Annulation impossible."); cancel.disabled = false; }
+  };
+
   const container = $("clips");
   job.clips.forEach((clip, i) => {
     const sig = `${clip.version || 1}|${clip.rendering || ""}|${clip.error || ""}`;

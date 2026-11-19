@@ -35,6 +35,8 @@ app = FastAPI(title="Clipping")
 executor = ThreadPoolExecutor(max_workers=int(os.getenv("WORKERS", "1")))
 lock = threading.Lock()
 jobs: dict[str, dict] = {}
+futures: dict[str, object] = {}
+BUSY = ("download", "transcribe", "analyze", "render")
 
 # ---------------------------------------------------------------- mot de passe (optionnel)
 
@@ -156,6 +158,7 @@ def run_job(job_id: str) -> None:
     _clean_sources(keep=job_id)
     ok = False
     t0 = time.time()
+    _update(job_id, status="download", progress=1, message="Démarrage du téléchargement…")
     try:
         info = pipeline.download(req["url"], work, _progress(job_id, "download"),
                                  req.get("high_quality", False))
@@ -350,7 +353,7 @@ def create_job(req: JobRequest):
     with lock:
         jobs[job_id] = job
         _save(job)
-    executor.submit(run_job, job_id)
+    futures[job_id] = executor.submit(run_job, job_id)
     return job
 
 
@@ -364,6 +367,10 @@ def get_job(job_id: str):
     if job_id not in jobs:
         raise HTTPException(404, "Projet introuvable.")
     job = jobs[job_id]
+    if job["status"] == "queued":
+        busy = next((j for j in jobs.values() if j["status"] in BUSY), None)
+        job["message"] = (f"En attente : « {busy.get('title') or 'une autre vidéo'} » est en cours."
+                          if busy else "Démarrage…")
     # Anciens projets : ajoute le texte des sous-titres de chaque clip (pour l'éditeur)
     if job["status"] == "done" and any("text" not in c for c in job["clips"]):
         try:
@@ -380,10 +387,15 @@ def delete_job(job_id: str):
     job = jobs.get(job_id)
     if not job:
         raise HTTPException(404, "Projet introuvable.")
-    if job["status"] not in ("done", "error"):
+    if job["status"] == "queued":
+        fut = futures.get(job_id)
+        if fut is not None and not fut.cancel():
+            raise HTTPException(409, "Ce projet vient de démarrer, impossible de l'annuler.")
+    elif job["status"] in BUSY:
         raise HTTPException(409, "Projet en cours de traitement.")
     with lock:
         jobs.pop(job_id)
+        futures.pop(job_id, None)
     shutil.rmtree(JOBS / job_id, ignore_errors=True)
     return {"ok": True}
 
