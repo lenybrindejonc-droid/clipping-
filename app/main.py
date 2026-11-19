@@ -1,6 +1,7 @@
 """Serveur web : API + interface."""
 from __future__ import annotations
 
+import asyncio
 import difflib
 import json
 import os
@@ -13,8 +14,12 @@ import uuid
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse
+import hashlib
+import hmac
+from urllib.parse import parse_qs
+
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -30,6 +35,49 @@ app = FastAPI(title="Clipping")
 executor = ThreadPoolExecutor(max_workers=int(os.getenv("WORKERS", "1")))
 lock = threading.Lock()
 jobs: dict[str, dict] = {}
+
+# ---------------------------------------------------------------- mot de passe (optionnel)
+
+APP_PASSWORD = os.getenv("APP_PASSWORD", "").strip()
+AUTH_COOKIE = "clipping_auth"
+
+
+def _token() -> str:
+    return hmac.new(APP_PASSWORD.encode(), b"clipping-session", hashlib.sha256).hexdigest()
+
+
+LOGIN_PAGE = """<!doctype html><html lang="fr"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1"><title>Clipping — connexion</title>
+<style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b0b10;color:#f2f2f7;
+font:16px system-ui,sans-serif}form{background:#15151d;border:1px solid #262633;border-radius:16px;padding:24px;
+width:min(340px,90vw);display:grid;gap:12px}input,button{font:inherit;padding:12px;border-radius:10px;border:1px solid #262633}
+input{background:#0f0f15;color:#f2f2f7}button{background:#ff2e63;color:#fff;border:0;font-weight:700}
+p{color:#ff7a8a;margin:0}</style></head><body><form method="post" action="/login">
+<h2 style="margin:0">✂️ Clipping</h2>{error}<input type="password" name="password" placeholder="Mot de passe" autofocus required>
+<button>Entrer</button></form></body></html>"""
+
+
+@app.middleware("http")
+async def require_password(request: Request, call_next):
+    if not APP_PASSWORD:
+        return await call_next(request)
+    secure = request.headers.get("x-forwarded-proto", request.url.scheme) == "https"
+    if request.url.path == "/login" and request.method == "POST":
+        form = parse_qs((await request.body()).decode(errors="ignore"))
+        given = (form.get("password") or [""])[0]
+        if hmac.compare_digest(given.encode(), APP_PASSWORD.encode()):
+            resp = RedirectResponse("/", status_code=303)
+            resp.set_cookie(AUTH_COOKIE, _token(), max_age=30 * 86400, httponly=True,
+                            secure=secure, samesite="none" if secure else "lax")
+            return resp
+        await asyncio.sleep(1)  # ralentit les essais au hasard
+        return HTMLResponse(LOGIN_PAGE.replace("{error}", "<p>Mot de passe incorrect.</p>"), status_code=401)
+    if hmac.compare_digest(request.cookies.get(AUTH_COOKIE, ""), _token()):
+        return await call_next(request)
+    if request.url.path.startswith(("/api/", "/media/")):
+        return JSONResponse({"detail": "Connexion requise."}, status_code=401)
+    return HTMLResponse(LOGIN_PAGE.replace("{error}", ""), status_code=401)
+
 
 YOUTUBE = re.compile(r"^https?://(www\.|m\.)?(youtube\.com|youtu\.be)/", re.I)
 

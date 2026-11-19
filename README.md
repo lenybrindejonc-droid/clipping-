@@ -57,3 +57,23 @@ static/            interface web
 - ~~Éditeur pour ajuster début/fin d'un clip~~ ✅ fait (bouton « Modifier » sur chaque clip).
 - Publication directe via les API TikTok / YouTube.
 - Comptes utilisateurs + file de tâches (Redis/Celery) pour un déploiement public.
+
+## Mettre en ligne sur Hugging Face (gratuit, privé)
+
+```bash
+./deploy_hf.sh
+```
+
+Le script demande un token Hugging Face (https://huggingface.co/settings/tokens, type « Write »),
+crée un Space **privé**, copie tes clés Claude/Groq du fichier `.env` dans les **Secrets** du Space
+(jamais dans le code), propose un mot de passe pour le site, puis envoie le code.
+Relance la même commande pour mettre le site à jour.
+
+### YouTube bloque (« Sign in to confirm you're not a bot »)
+
+YouTube bloque souvent les serveurs. Solution : des cookies d'un compte YouTube **secondaire**.
+1. Dans Chrome, connecte-toi à YouTube avec ce compte et installe l'extension
+   « Get cookies.txt LOCALLY ».
+2. Sur youtube.com, exporte les cookies et enregistre le fichier sous `cookies.txt`
+   dans le dossier du projet.
+3. Relance `./deploy_hf.sh` : les cookies sont envoyés comme secret (jamais publiés).

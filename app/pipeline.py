@@ -25,6 +25,21 @@ def _strip(text: str) -> str:
     return re.sub(r"\x1b\[[0-9;]*m|\[[0-9;]*m", "", text).replace("ERROR:", "").strip()
 
 
+def _cookie_file() -> str | None:
+    """Cookies YouTube (fichier cookies.txt ou secret YT_COOKIES) : aident quand YouTube
+    bloque les serveurs (« Sign in to confirm you're not a bot »)."""
+    content = os.getenv("YT_COOKIES", "").strip()
+    if content:
+        path = Path(os.getenv("DATA_DIR", "data")) / "cookies.txt"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if not path.exists():
+            path.write_text(content + "\n")
+            path.chmod(0o600)
+        return str(path)
+    local = Path(__file__).resolve().parent.parent / "cookies.txt"
+    return str(local) if local.exists() else None
+
+
 def download(url: str, workdir: Path, progress: Progress, high_quality: bool = False) -> dict:
     """Télécharge la vidéo YouTube (≤1080p) en mp4."""
     import yt_dlp
@@ -58,6 +73,8 @@ def download(url: str, workdir: Path, progress: Progress, high_quality: bool = F
             "no_color": True,
             "progress_hooks": [hook],
         }
+        if cookies := _cookie_file():
+            opts["cookiefile"] = cookies
         try:
             with yt_dlp.YoutubeDL(opts) as ydl:
                 info = ydl.extract_info(url, download=True)
@@ -65,7 +82,11 @@ def download(url: str, workdir: Path, progress: Progress, high_quality: bool = F
         except yt_dlp.utils.DownloadError as exc:
             last_exc = exc
             print(f"[download] échec avec le format {fmt!r} : {exc}")
-            if "Sign in" in str(exc) or "Private video" in str(exc) or "unavailable" in str(exc):
+            if "Sign in" in str(exc) or "not a bot" in str(exc):
+                raise RuntimeError(
+                    "YouTube bloque le téléchargement depuis ce serveur. Ajoute des cookies YouTube "
+                    "(voir README, section « YouTube bloque »)") from exc
+            if "Private video" in str(exc) or "unavailable" in str(exc):
                 raise
     else:
         raise RuntimeError(f"téléchargement impossible ({_strip(str(last_exc))}). "
