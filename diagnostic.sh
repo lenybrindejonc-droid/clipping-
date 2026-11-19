@@ -41,4 +41,12 @@ for client in default tv ios web_safari android mweb; do
     printf "%-11s : ÉCHEC — %s\n" "$client" "$(echo "$out" | grep -o 'ERROR.*' | head -1 | cut -c1-90)"
   fi
 done
+
+echo "--- formats réellement proposés ---"
+timeout 90 $YTDLP -F "${COOKIES[@]}" "$URL" 2>&1 | tail -12
+
+echo "--- vidéo de référence (test indépendant) ---"
+timeout 60 $YTDLP --skip-download --print "%(title)s" "${COOKIES[@]}" \
+  "https://www.youtube.com/watch?v=jNQXAC9IVRw" 2>&1 | tail -2
+
 echo "======================================="
