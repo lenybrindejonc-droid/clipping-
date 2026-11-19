@@ -112,7 +112,9 @@ def _run_ytdlp(url: str, workdir: Path, fmt: str, progress: Progress,
            "--print-json", "--no-simulate",
            "--socket-timeout", "20", "--retries", "3", "--fragment-retries", "5",
            "--extractor-retries", "2",
-           "--extractor-args", f"youtube:player_client={','.join(PLAYER_CLIENTS)}"]
+           "--extractor-args", f"youtube:player_client={','.join(PLAYER_CLIENTS)}",
+           # solveur des défis JavaScript de YouTube (sans lui : « No video formats found »)
+           "--remote-components", "ejs:github"]
     if os.getenv("YT_FORCE_IPV4", "1") == "1":
         cmd.append("--force-ipv4")
     if cookies := _cookie_file():

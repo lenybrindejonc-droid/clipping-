@@ -34,7 +34,7 @@ echo "--- test des identités (lecture des infos seulement) ---"
 COOKIES=(); [ -n "$found" ] && COOKIES=(--cookies "$found")
 for client in default tv ios web_safari android mweb; do
   if [ "$client" = default ]; then ARGS=(); else ARGS=(--extractor-args "youtube:player_client=$client"); fi
-  out=$(timeout 60 $YTDLP --skip-download --print "%(title)s" "${COOKIES[@]}" "${ARGS[@]}" "$URL" 2>&1)
+  out=$(timeout 90 $YTDLP --skip-download --print "%(title)s" --remote-components ejs:github "${COOKIES[@]}" "${ARGS[@]}" "$URL" 2>&1)
   if [ $? -eq 0 ] && [ -n "$out" ]; then
     printf "%-11s : OK  (%s)\n" "$client" "$(echo "$out" | head -1 | cut -c1-40)"
   else
@@ -43,10 +43,10 @@ for client in default tv ios web_safari android mweb; do
 done
 
 echo "--- formats réellement proposés ---"
-timeout 90 $YTDLP -F "${COOKIES[@]}" "$URL" 2>&1 | tail -12
+timeout 90 $YTDLP -F --remote-components ejs:github "${COOKIES[@]}" "$URL" 2>&1 | tail -12
 
 echo "--- vidéo de référence (test indépendant) ---"
-timeout 60 $YTDLP --skip-download --print "%(title)s" "${COOKIES[@]}" \
+timeout 60 $YTDLP --skip-download --print "%(title)s" --remote-components ejs:github "${COOKIES[@]}" \
   "https://www.youtube.com/watch?v=jNQXAC9IVRw" 2>&1 | tail -2
 
 echo "======================================="

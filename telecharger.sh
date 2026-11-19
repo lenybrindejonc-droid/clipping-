@@ -5,7 +5,7 @@ set -e
 cd "$(dirname "$0")"
 if [ -z "${1:-}" ]; then echo 'Usage : ./telecharger.sh "https://www.youtube.com/watch?v=..."'; exit 1; fi
 if [ ! -d .venv ]; then echo "Lance d'abord ./install.sh"; exit 1; fi
-.venv/bin/pip install -q -U yt-dlp >/dev/null 2>&1 || true
+.venv/bin/pip install -q -U yt-dlp yt-dlp-ejs >/dev/null 2>&1 || true
 
 # YouTube exige maintenant un moteur JavaScript
 export PATH="$HOME/.local/bin:$PATH"
@@ -32,6 +32,7 @@ fi
 mkdir -p ~/videos
 OUT="$HOME/videos/%(title).80s.%(ext)s"
 FORMAT='-S res:1080,vcodec:h264,ext:mp4 --merge-output-format mp4'
+EJS=(--remote-components ejs:github)   # solveur des défis JavaScript de YouTube
 
 # On essaie plusieurs « identités » : YouTube en refuse certaines selon les jours
 for client in default tv ios web_safari android mweb; do
@@ -43,7 +44,7 @@ for client in default tv ios web_safari android mweb; do
     echo "▶️  Nouvelle tentative en se présentant comme : $client"
     ARGS=(--extractor-args "youtube:player_client=$client")
   fi
-  if .venv/bin/yt-dlp $FORMAT "${COOKIES[@]}" "${ARGS[@]}" -o "$OUT" "$1"; then
+  if .venv/bin/yt-dlp $FORMAT "${EJS[@]}" "${COOKIES[@]}" "${ARGS[@]}" -o "$OUT" "$1"; then
     echo
     echo "✅ Vidéo enregistrée dans le dossier « videos »."
     ls -lh ~/videos | tail -3
