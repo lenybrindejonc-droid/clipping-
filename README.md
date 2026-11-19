@@ -54,6 +54,6 @@ static/            interface web
 ## Pistes pour la suite
 
 - Détection du locuteur actif (lèvres/audio) pour les podcasts à plusieurs.
-- Éditeur pour ajuster début/fin d'un clip avant export.
+- ~~Éditeur pour ajuster début/fin d'un clip~~ ✅ fait (bouton « Modifier » sur chaque clip).
 - Publication directe via les API TikTok / YouTube.
 - Comptes utilisateurs + file de tâches (Redis/Celery) pour un déploiement public.

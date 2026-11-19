@@ -71,3 +71,20 @@ h3 { color: var(--muted); font-size: 14px; text-transform: uppercase; letter-spa
 .history li:hover { border-color: var(--accent); }
 .history .h-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .warn { color: #ffcc66; background: #2a2210; border-radius: 10px; padding: 10px 12px; margin: 8px 0 0; font-size: 14px; }
+.video-wrap { position: relative; }
+.busy {
+  position: absolute; inset: 0; display: flex; flex-direction: column; gap: 12px;
+  align-items: center; justify-content: center; background: rgba(0,0,0,.72); font-weight: 700; text-align: center; padding: 16px;
+}
+.busy[hidden] { display: none; }
+.spinner { width: 36px; height: 36px; border: 4px solid #fff3; border-top-color: var(--accent); border-radius: 50%; animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.edit-toggle { width: 100%; padding: 10px; font-size: 14px; }
+.editor { display: flex; flex-direction: column; gap: 10px; border-top: 1px solid var(--line); padding-top: 12px; }
+.editor[hidden] { display: none; }
+.trim { display: flex; align-items: center; gap: 8px; }
+.trim-label { width: 44px; font-size: 13px; color: var(--muted); }
+.trim output { flex: 1; text-align: center; font-variant-numeric: tabular-nums; font-weight: 700; }
+.step { padding: 8px 10px; font-size: 13px; background: #23232e; }
+.small { font-size: 12px; margin: 0; }
+.clip-error { margin: 0; }

@@ -1,6 +1,7 @@
 """Serveur web : API + interface."""
 from __future__ import annotations
 
+import difflib
 import json
 import os
 import re
@@ -69,9 +70,17 @@ def _load_existing() -> None:
 
 _load_existing()
 
-if os.getenv("KEEP_SOURCE", "0") != "1":
-    for _f in JOBS.glob("*/source*"):
-        _f.unlink(missing_ok=True)
+def _clean_sources(keep: str | None) -> None:
+    """Garde la vidéo source d'un seul projet (pour pouvoir modifier ses clips) : le disque est petit."""
+    if os.getenv("KEEP_SOURCE", "0") == "1":
+        return
+    for f in JOBS.glob("*/source*"):
+        if f.parent.name != keep:
+            f.unlink(missing_ok=True)
+
+
+_done = [j for j in jobs.values() if j["status"] == "done"]
+_clean_sources(max(_done, key=lambda j: j["created_at"])["id"] if _done else None)
 
 # Pondération des étapes dans la barre de progression globale
 STAGES = {"download": (0, 15), "transcribe": (15, 55), "analyze": (55, 65), "render": (65, 100)}
@@ -90,6 +99,8 @@ def run_job(job_id: str) -> None:
     job = jobs[job_id]
     req = job["request"]
     work = JOBS / job_id
+    _clean_sources(keep=job_id)
+    ok = False
     try:
         info = pipeline.download(req["url"], work, _progress(job_id, "download"),
                                  req.get("high_quality", False))
@@ -120,10 +131,12 @@ def run_job(job_id: str) -> None:
                 high_quality=req.get("high_quality", False),
             )
             clips.append({**m, "file": name, "thumb": name.replace(".mp4", ".jpg"),
-                          "duration": round(m["end"] - m["start"], 1)})
+                          "duration": round(m["end"] - m["start"], 1), "layout": req["layout"],
+                          "text": _clip_text(words, m["start"], m["end"]), "version": 1})
             _update(job_id, clips=clips)
 
         _update(job_id, status="done", progress=100, message=f"{len(clips)} shorts prêts !")
+        ok = True
     except Exception as exc:
         traceback.print_exc()
         msg = str(exc).strip().splitlines()[-1] if str(exc).strip() else exc.__class__.__name__
@@ -131,12 +144,134 @@ def run_job(job_id: str) -> None:
             msg = "disque plein — libère de la place (commande : df -h ~)"
         _update(job_id, status="error", message=f"Erreur : {pipeline._strip(msg)}")
     finally:
-        # Supprime la vidéo source et les fichiers temporaires, même en cas d'échec
-        if os.getenv("KEEP_SOURCE", "0") != "1":
+        # En cas d'échec, supprime la vidéo source (sinon on la garde pour les modifications)
+        if not ok and os.getenv("KEEP_SOURCE", "0") != "1":
             for f in work.glob("source*"):
                 f.unlink(missing_ok=True)
         for f in work.glob("*.ass"):
             f.unlink(missing_ok=True)
+
+
+# ---------------------------------------------------------------- modification d'un clip
+
+def _words(work: Path) -> list[dict]:
+    tr = json.loads((work / "transcript.json").read_text())
+    return tr.get("words_edited") or [w for s in tr["segments"] for w in s["words"]]
+
+
+def _clip_text(words: list[dict], start: float, end: float) -> str:
+    return " ".join(w["word"] for w in words if w["end"] > start and w["start"] < end)
+
+
+def _norm(word: str) -> str:
+    return re.sub(r"[^\w]", "", word.lower())
+
+
+def _apply_text_edit(words: list[dict], start: float, end: float, text: str) -> list[dict]:
+    """Remplace les mots de [start, end] par le texte corrigé, en gardant les horodatages
+    des mots inchangés et en répartissant les nouveaux mots sur la durée des anciens."""
+    inside = [w for w in words if w["end"] > start and w["start"] < end]
+    outside = [w for w in words if not (w["end"] > start and w["start"] < end)]
+    tokens: list[str] = []
+    for tok in text.split():  # « ! », « ? », « , » seuls : collés au mot précédent
+        if tokens and not re.search(r"\w", tok):
+            tokens[-1] += tok
+        else:
+            tokens.append(tok)
+    sm = difflib.SequenceMatcher(a=[_norm(w["word"]) for w in inside],
+                                 b=[_norm(t) for t in tokens], autojunk=False)
+    new: list[dict] = []
+    for tag, i1, i2, j1, j2 in sm.get_opcodes():
+        if tag == "equal":
+            new += [{**inside[i1 + k], "word": tokens[j1 + k]} for k in range(i2 - i1)]
+        elif tag in ("replace", "insert"):
+            n = j2 - j1
+            if i2 > i1:
+                t0, t1 = inside[i1]["start"], inside[i2 - 1]["end"]
+            else:
+                t0 = inside[i1 - 1]["end"] if i1 > 0 else (inside[0]["start"] - 0.3 * n if inside else start)
+                t1 = inside[i1]["start"] if i1 < len(inside) else t0 + 0.3 * n
+                if not inside:
+                    t0, t1 = start, end
+            if t1 - t0 < 0.15 * n:
+                t1 = t0 + 0.15 * n
+            new += [{"start": round(t0 + (t1 - t0) * k / n, 2), "end": round(t0 + (t1 - t0) * (k + 1) / n, 2),
+                     "word": tokens[j1 + k]} for k in range(n)]
+    return sorted(outside + new, key=lambda w: w["start"])
+
+
+class ClipEdit(BaseModel):
+    start: float = Field(ge=0)
+    end: float = Field(gt=0)
+    hook: str = Field("", max_length=120)
+    text: str | None = Field(None, max_length=5000)
+    layout: str = Field("auto", pattern="^(auto|crop|blur|gaming)$")
+
+
+def _set_clip(job_id: str, n: int, **fields) -> None:
+    with lock:
+        jobs[job_id]["clips"][n].update(fields)
+        _save(jobs[job_id])
+
+
+def rerender_clip(job_id: str, n: int, edit: dict) -> None:
+    job = jobs[job_id]
+    req = job["request"]
+    work = JOBS / job_id
+    clip = job["clips"][n]
+    try:
+        src = next((f for f in work.glob("source.*") if f.suffix in (".mp4", ".mkv", ".webm")), None)
+        if src is None:
+            _set_clip(job_id, n, rendering="Re-téléchargement de la vidéo…")
+            _clean_sources(keep=job_id)
+            src = pipeline.download(req["url"], work, lambda f, m: None,
+                                    req.get("high_quality", False))["path"]
+        _set_clip(job_id, n, rendering="Montage en cours…")
+
+        words = _words(work)
+        if edit["text"] is not None and edit["text"].strip() != _clip_text(words, clip["start"], clip["end"]).strip():
+            words = _apply_text_edit(words, clip["start"], clip["end"], edit["text"])
+            tr = json.loads((work / "transcript.json").read_text())
+            tr["words_edited"] = words
+            (work / "transcript.json").write_text(json.dumps(tr, ensure_ascii=False))
+
+        start, end = edit["start"], edit["end"]
+        pipeline.render_clip(
+            src, work / clip["file"], start, end, words, layout=edit["layout"],
+            subtitles=req["subtitles"], hook=edit["hook"].strip() or None,
+            high_quality=req.get("high_quality", False),
+        )
+        _set_clip(job_id, n, start=round(start, 2), end=round(end, 2), duration=round(end - start, 1),
+                  hook=edit["hook"].strip(), layout=edit["layout"], text=_clip_text(words, start, end),
+                  version=clip.get("version", 1) + 1, rendering=None, error=None)
+    except Exception as exc:
+        traceback.print_exc()
+        _set_clip(job_id, n, rendering=None, error=pipeline._strip(str(exc).strip().splitlines()[-1]
+                                                                    if str(exc).strip() else "erreur"))
+    finally:
+        for f in work.glob("*.ass"):
+            f.unlink(missing_ok=True)
+
+
+@app.post("/api/jobs/{job_id}/clips/{n}")
+def edit_clip(job_id: str, n: int, edit: ClipEdit):
+    job = jobs.get(job_id)
+    if not job:
+        raise HTTPException(404, "Projet introuvable.")
+    if job["status"] != "done" or not 0 <= n < len(job["clips"]):
+        raise HTTPException(409, "Ce clip ne peut pas être modifié pour l'instant.")
+    clip = job["clips"][n]
+    if clip.get("rendering"):
+        raise HTTPException(409, "Ce clip est déjà en cours de montage.")
+    duration = job.get("duration") or 1e9
+    start, end = max(0.0, edit.start), min(edit.end, duration)
+    if end - start < 3:
+        raise HTTPException(400, "Le clip doit durer au moins 3 secondes.")
+    if end - start > 180:
+        raise HTTPException(400, "Le clip ne peut pas dépasser 3 minutes.")
+    _set_clip(job_id, n, rendering="En attente…", error=None)
+    executor.submit(rerender_clip, job_id, n, edit.model_dump() | {"start": start, "end": end})
+    return jobs[job_id]
 
 
 @app.post("/api/jobs")
@@ -168,7 +303,16 @@ def list_jobs():
 def get_job(job_id: str):
     if job_id not in jobs:
         raise HTTPException(404, "Projet introuvable.")
-    return jobs[job_id]
+    job = jobs[job_id]
+    # Anciens projets : ajoute le texte des sous-titres de chaque clip (pour l'éditeur)
+    if job["status"] == "done" and any("text" not in c for c in job["clips"]):
+        try:
+            words = _words(JOBS / job_id)
+            for c in job["clips"]:
+                c.setdefault("text", _clip_text(words, c["start"], c["end"]))
+        except Exception:
+            pass
+    return job
 
 
 @app.delete("/api/jobs/{job_id}")

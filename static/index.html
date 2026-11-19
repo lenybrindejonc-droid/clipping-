@@ -73,7 +73,10 @@
 
   <template id="clip-tpl">
     <article class="clip">
-      <video controls preload="none" playsinline></video>
+      <div class="video-wrap">
+        <video controls preload="none" playsinline></video>
+        <div class="busy" hidden><span class="spinner"></span><span class="busy-msg"></span></div>
+      </div>
       <div class="clip-body">
         <div class="clip-top">
           <span class="score"></span>
@@ -81,11 +84,45 @@
         </div>
         <h4 class="title"></h4>
         <p class="reason muted"></p>
+        <p class="clip-error warn" hidden></p>
         <textarea class="caption" readonly rows="3"></textarea>
         <div class="actions">
           <a class="btn dl" download>Télécharger</a>
           <button class="btn ghost copy" type="button">Copier la légende</button>
         </div>
+        <button class="btn ghost edit-toggle" type="button">✏️ Modifier</button>
+
+        <form class="editor" hidden>
+          <div class="trim">
+            <span class="trim-label">Début</span>
+            <button type="button" class="step" data-field="start" data-delta="-1">−1 s</button>
+            <output class="t-start"></output>
+            <button type="button" class="step" data-field="start" data-delta="1">+1 s</button>
+          </div>
+          <div class="trim">
+            <span class="trim-label">Fin</span>
+            <button type="button" class="step" data-field="end" data-delta="-1">−1 s</button>
+            <output class="t-end"></output>
+            <button type="button" class="step" data-field="end" data-delta="1">+1 s</button>
+          </div>
+          <p class="muted small t-dur"></p>
+          <label>Accroche (texte en haut, laisse vide pour aucune)
+            <input class="e-hook" type="text" maxlength="120" /></label>
+          <label>Sous-titres (corrige les mots mal écrits)
+            <textarea class="e-text" rows="4"></textarea></label>
+          <label>Cadrage
+            <select class="e-layout">
+              <option value="auto">Automatique</option>
+              <option value="gaming">Gaming (facecam en haut, jeu en bas)</option>
+              <option value="crop">Plein écran (suivi du visage)</option>
+              <option value="blur">Vidéo entière + fond flou</option>
+            </select></label>
+          <p class="muted small">Si tu changes le début ou la fin, les sous-titres se mettent à jour après le montage.</p>
+          <div class="actions">
+            <button type="submit" class="btn">🎬 Refaire le clip</button>
+            <button type="button" class="btn ghost cancel">Annuler</button>
+          </div>
+        </form>
       </div>
     </article>
   </template>
