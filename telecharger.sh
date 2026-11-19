@@ -35,8 +35,11 @@ OUT="$HOME/videos/%(title).80s.%(ext)s"
 FORMAT='-S res:1080,vcodec:h264,ext:mp4 --merge-output-format mp4'
 EJS=(--remote-components ejs:github)   # solveur des défis JavaScript de YouTube
 
-# On essaie plusieurs « identités » : YouTube en refuse certaines selon les jours
-for client in default tv ios web_safari android mweb; do
+# Peu de tentatives : chaque essai raté rend YouTube plus méfiant envers ton adresse.
+# Pour tout essayer malgré tout : TOUT=1 ./telecharger.sh "lien"
+CLIENTS="default tv"
+[ "${TOUT:-0}" = "1" ] && CLIENTS="default tv ios web_safari android mweb"
+for client in $CLIENTS; do
   echo
   if [ "$client" = default ]; then
     echo "▶️  Tentative 1 (normale)…"

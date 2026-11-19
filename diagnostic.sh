@@ -32,7 +32,7 @@ echo "partage ChromeOS : $([ -d /mnt/chromeos ] && echo OUI || echo NON)"
 
 echo "--- test des identités (lecture des infos seulement) ---"
 COOKIES=(); [ -n "$found" ] && COOKIES=(--cookies "$found")
-for client in default tv ios web_safari android mweb; do
+for client in default tv; do   # peu de tentatives : on évite de faire signaler ton adresse
   if [ "$client" = default ]; then ARGS=(); else ARGS=(--extractor-args "youtube:player_client=$client"); fi
   out=$(timeout 90 $YTDLP --skip-download --print "%(title)s" --remote-components ejs:github "${COOKIES[@]}" "${ARGS[@]}" "$URL" 2>&1)
   if [ $? -eq 0 ] && [ -n "$out" ]; then
