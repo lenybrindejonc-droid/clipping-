@@ -7,6 +7,16 @@ set -a; [ -f .env ] && . ./.env; set +a
 if [[ "${ANTHROPIC_API_KEY:-}" != sk-ant-* ]]; then
   echo "⚠️  Pas de clé Claude valide dans .env → les moments seront choisis en mode basique (moins bon)."
 fi
+if [[ "${GROQ_API_KEY:-}" == gsk_* ]]; then
+  .venv/bin/pip install -q -r requirements.txt >/dev/null 2>&1 || true
+  if pb=$(.venv/bin/python -c "from app import cloud_transcribe as c; print(c.check())" 2>&1) && [ -z "$pb" ]; then
+    echo "✅ Transcription en ligne Groq : OK"
+  else
+    echo "❌ Transcription en ligne Groq : $pb"
+  fi
+else
+  echo "⚠️  Pas de clé Groq dans .env → transcription locale (très lente sur ce PC)."
+fi
 .venv/bin/pip install -q -r requirements.txt >/dev/null 2>&1 || true
 .venv/bin/pip install -q -U yt-dlp >/dev/null 2>&1 || true   # YouTube change souvent
 echo "🚀 Ouvre http://localhost:8000 dans ton navigateur (Ctrl+C pour arrêter)"

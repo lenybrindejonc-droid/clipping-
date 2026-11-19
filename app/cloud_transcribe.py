@@ -29,6 +29,18 @@ def _encode(src: Path, dst: Path, start: float, dur: float) -> None:
     )
 
 
+def check() -> str:
+    """Teste la clé Groq ; renvoie '' si OK, sinon le problème."""
+    try:
+        r = httpx.get("https://api.groq.com/openai/v1/models", timeout=15,
+                      headers={"Authorization": f"Bearer {os.environ['GROQ_API_KEY'].strip()}"})
+    except Exception as exc:
+        return f"Groq injoignable ({exc.__class__.__name__})"
+    if r.status_code == 401:
+        return "clé Groq refusée"
+    return "" if r.status_code < 400 else f"Groq a répondu {r.status_code}"
+
+
 def _post(audio: Path, language: str | None) -> dict:
     data = [("model", MODEL), ("response_format", "verbose_json"),
             ("timestamp_granularities[]", "word"), ("timestamp_granularities[]", "segment")]
@@ -44,7 +56,12 @@ def _post(audio: Path, language: str | None) -> dict:
             continue
         if r.status_code == 401:
             raise RuntimeError("clé Groq refusée (vérifie GROQ_API_KEY dans .env)")
-        r.raise_for_status()
+        if r.status_code >= 400:
+            try:
+                detail = r.json().get("error", {}).get("message", "")
+            except Exception:
+                detail = r.text[:200]
+            raise RuntimeError(f"Groq a répondu {r.status_code} : {detail}")
         return r.json()
     raise RuntimeError("limite Groq atteinte, réessaie plus tard")
 

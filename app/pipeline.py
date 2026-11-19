@@ -115,8 +115,11 @@ def transcribe(path: Path, progress: Progress, language: str | None = None,
         try:
             return cloud_transcribe.transcribe(path, duration or probe_duration(path), progress, language)
         except Exception as exc:
-            print(f"[transcribe] Groq indisponible ({exc}), transcription locale")
-            progress(0.0, f"Transcription en ligne impossible ({exc}) → transcription locale (lente)…")
+            print(f"[transcribe] Groq indisponible : {exc}")
+            if os.getenv("TRANSCRIBE_FALLBACK", "0") != "1":
+                # Pas de repli silencieux : en local, ça peut prendre des heures sur un petit PC
+                raise RuntimeError(f"transcription en ligne (Groq) impossible : {exc}") from exc
+            progress(0.0, f"Groq impossible ({exc}) → transcription locale (lente)…")
     return transcribe_local(path, progress, language)
 
 
@@ -147,7 +150,8 @@ def transcribe_local(path: Path, progress: Progress, language: str | None = None
             ],
         })
         if info.duration:
-            progress(min(s.end / info.duration, 1.0), "Transcription de l'audio…")
+            progress(min(s.end / info.duration, 1.0),
+                     "Transcription locale (lente — ajoute une clé GROQ_API_KEY pour aller 50x plus vite)…")
     return {"language": info.language, "segments": segments}
 
 
