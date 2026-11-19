@@ -143,19 +143,28 @@ def _progress(job_id: str, stage: str):
     return cb
 
 
+def _chrono(stage: str, t0: float) -> float:
+    now = time.time()
+    print(f"[durée] {stage} : {now - t0:.0f} s", flush=True)
+    return now
+
+
 def run_job(job_id: str) -> None:
     job = jobs[job_id]
     req = job["request"]
     work = JOBS / job_id
     _clean_sources(keep=job_id)
     ok = False
+    t0 = time.time()
     try:
         info = pipeline.download(req["url"], work, _progress(job_id, "download"),
                                  req.get("high_quality", False))
+        t0 = _chrono("téléchargement", t0)
         _update(job_id, title=info["title"], channel=info["channel"], duration=info["duration"])
 
         tr = pipeline.transcribe(info["path"], _progress(job_id, "transcribe"), req.get("language"),
                                  info["duration"])
+        t0 = _chrono("transcription", t0)
         (work / "transcript.json").write_text(json.dumps(tr, ensure_ascii=False))
 
         _progress(job_id, "analyze")(0, "L'IA cherche les moments les plus viraux…")
@@ -163,6 +172,7 @@ def run_job(job_id: str) -> None:
             tr["segments"], info["title"], info["duration"],
             req["num_clips"], req["min_duration"], req["max_duration"],
         )
+        t0 = _chrono("analyse IA", t0)
         if not moments:
             raise RuntimeError("Aucun moment exploitable trouvé (vidéo sans parole ?).")
         _update(job_id, engine=engine, engine_note=note)
@@ -182,6 +192,7 @@ def run_job(job_id: str) -> None:
                           "duration": round(m["end"] - m["start"], 1), "layout": req["layout"],
                           "text": _clip_text(words, m["start"], m["end"]), "version": 1})
             _update(job_id, clips=clips)
+            t0 = _chrono(f"montage clip {i}", t0)
 
         _update(job_id, status="done", progress=100, message=f"{len(clips)} shorts prêts !")
         ok = True
@@ -281,7 +292,8 @@ def rerender_clip(job_id: str, n: int, edit: dict) -> None:
             words = _apply_text_edit(words, clip["start"], clip["end"], edit["text"])
             tr = json.loads((work / "transcript.json").read_text())
             tr["words_edited"] = words
-            (work / "transcript.json").write_text(json.dumps(tr, ensure_ascii=False))
+            t0 = _chrono("transcription", t0)
+        (work / "transcript.json").write_text(json.dumps(tr, ensure_ascii=False))
 
         start, end = edit["start"], edit["end"]
         pipeline.render_clip(

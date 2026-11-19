@@ -80,10 +80,10 @@ def download(url: str, workdir: Path, progress: Progress, high_quality: bool = F
             "no_color": True,
             "progress_hooks": [hook],
             # Réseau : réessais et temps d'attente généreux (les serveurs se font souvent couper)
-            "socket_timeout": 30,
-            "retries": 5,
-            "fragment_retries": 10,
-            "extractor_retries": 5,
+            "socket_timeout": 20,
+            "retries": 3,
+            "fragment_retries": 5,
+            "extractor_retries": 2,
             "extractor_args": {"youtube": {"player_client": PLAYER_CLIENTS}},
         }
         if os.getenv("YT_FORCE_IPV4", "1") == "1":
