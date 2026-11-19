@@ -22,9 +22,10 @@ find_cookies() {
 COOKIES=()
 found=$(find_cookies)
 if [ -n "$found" ]; then
-  [ "$found" != "cookies.txt" ] && cp -f "$found" cookies.txt
-  COOKIES=(--cookies cookies.txt)
-  echo "🍪 Cookies trouvés : $found"
+  COOKIES=(--cookies "$found")   # on utilise le fichier tel quel (pas de copie : évite les doublons)
+  age=$(( ($(date +%s) - $(stat -c %Y "$found")) / 3600 ))
+  echo "🍪 Cookies : $found ($(grep -ci youtube "$found") lignes youtube, exportés il y a ${age} h)"
+  [ "$age" -gt 48 ] && echo "   ⚠️  Ils datent : si ça échoue, refais un export (méthode navigation privée)."
 else
   echo "ℹ️  Aucun fichier de cookies trouvé — on essaie sans."
 fi
