@@ -16,6 +16,7 @@ function params() {
     max_duration: +$("max").value,
     layout: $("layout").value,
     subtitles: $("subs").checked,
+    show_hook: $("hook").checked,
     high_quality: $("hq").checked,
     language: $("lang").value || null,
   };
@@ -162,6 +163,15 @@ function buildCard(job, clip, i) {
   q(".time").textContent = `${fmt(clip.start)} → ${fmt(clip.end)} · ${Math.round(clip.duration)}s`;
   q(".title").textContent = clip.title;
   q(".reason").textContent = clip.reason;
+  if (clip.hook) {
+    q(".hook-line").hidden = false;
+    q(".hook-text").textContent = clip.hook;
+    q(".copy-hook").addEventListener("click", async (e) => {
+      await navigator.clipboard.writeText(clip.hook);
+      e.target.textContent = "copié ✓";
+      setTimeout(() => (e.target.textContent = "copier"), 1500);
+    });
+  }
   const caption = `${clip.description}\n\n${(clip.hashtags || []).map((h) => (h.startsWith("#") ? h : `#${h}`)).join(" ")}`;
   q(".caption").value = caption;
   const dl = q(".dl");
@@ -197,7 +207,7 @@ function buildCard(job, clip, i) {
     editor.hidden = !editor.hidden;
     q(".edit-toggle").textContent = editor.hidden ? "✏️ Modifier" : "Fermer l'éditeur";
   });
-  q(".e-hook").value = clip.hook || "";
+  q(".e-hook").value = clip.hook_on_video || "";
   q(".e-text").value = clip.text || "";
   q(".e-layout").value = clip.layout || job.request.layout || "auto";
   editor.querySelectorAll(".step").forEach((b) =>
@@ -212,7 +222,7 @@ function buildCard(job, clip, i) {
   );
   q(".cancel").addEventListener("click", () => {
     state.start = clip.start; state.end = clip.end;
-    q(".e-hook").value = clip.hook || "";
+    q(".e-hook").value = clip.hook_on_video || "";
     q(".e-text").value = clip.text || "";
     show();
     editor.hidden = true;

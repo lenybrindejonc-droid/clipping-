@@ -44,6 +44,7 @@
               <option value="pt">Portugais</option>
             </select></label>
           <label class="check"><input id="subs" type="checkbox" checked /> Sous-titres animés</label>
+          <label class="check"><input id="hook" type="checkbox" /> Incruster l'accroche sur la vidéo</label>
           <label class="check"><input id="hq" type="checkbox" checked /> Qualité max 1440p (plus lent)</label>
         </div>
       </details>
@@ -96,6 +97,8 @@
           <span class="time muted"></span>
         </div>
         <h4 class="title"></h4>
+        <p class="hook-line" hidden><span class="muted">Accroche :</span> <b class="hook-text"></b>
+          <button type="button" class="link copy-hook">copier</button></p>
         <p class="reason muted"></p>
         <p class="clip-error warn" hidden></p>
         <textarea class="caption" readonly rows="3"></textarea>
@@ -119,7 +122,7 @@
             <button type="button" class="step" data-field="end" data-delta="1">+1 s</button>
           </div>
           <p class="muted small t-dur"></p>
-          <label>Accroche (texte en haut, laisse vide pour aucune)
+          <label>Texte à incruster en haut de la vidéo (vide = rien, pour l'écrire toi-même sur TikTok)
             <input class="e-hook" type="text" maxlength="120" /></label>
           <label>Sous-titres (corrige les mots mal écrits)
             <textarea class="e-text" rows="4"></textarea></label>

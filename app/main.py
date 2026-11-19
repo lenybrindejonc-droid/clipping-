@@ -111,6 +111,7 @@ class JobRequest(BaseModel):
     max_duration: int = Field(40, ge=10, le=180)
     layout: str = Field("auto", pattern="^(auto|crop|blur|gaming)$")
     subtitles: bool = True
+    show_hook: bool = False      # accroche incrustée sur la vidéo (sinon : texte à copier)
     high_quality: bool = False
     language: str | None = None
 
@@ -213,10 +214,12 @@ def run_job(job_id: str) -> None:
             name = f"clip_{i:02d}.mp4"
             pipeline.render_clip(
                 info["path"], work / name, m["start"], m["end"], words,
-                layout=req["layout"], subtitles=req["subtitles"], hook=m.get("hook"),
+                layout=req["layout"], subtitles=req["subtitles"],
+                hook=m.get("hook") if req.get("show_hook") else None,
                 high_quality=req.get("high_quality", False),
             )
-            clips.append({**m, "file": name, "thumb": name.replace(".mp4", ".jpg"),
+            clips.append({**m, "hook_on_video": m.get("hook") if req.get("show_hook") else "",
+                          "file": name, "thumb": name.replace(".mp4", ".jpg"),
                           "duration": round(m["end"] - m["start"], 1), "layout": req["layout"],
                           "text": _clip_text(words, m["start"], m["end"]), "version": 1})
             _update(job_id, clips=clips)
@@ -332,7 +335,8 @@ def rerender_clip(job_id: str, n: int, edit: dict) -> None:
             high_quality=req.get("high_quality", False),
         )
         _set_clip(job_id, n, start=round(start, 2), end=round(end, 2), duration=round(end - start, 1),
-                  hook=edit["hook"].strip(), layout=edit["layout"], text=_clip_text(words, start, end),
+                  hook_on_video=edit["hook"].strip(), layout=edit["layout"],
+                  text=_clip_text(words, start, end),
                   version=clip.get("version", 1) + 1, rendering=None, error=None)
     except Exception as exc:
         traceback.print_exc()
