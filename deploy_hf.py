@@ -1,7 +1,6 @@
 """Met le site en ligne sur Hugging Face Spaces (privé), en une commande : ./deploy_hf.sh"""
 from __future__ import annotations
 
-import getpass
 import re
 import sys
 from pathlib import Path
@@ -27,7 +26,7 @@ def main() -> None:
     env = read_env()
     print("\n🔑 Il faut un « token » Hugging Face avec le droit d'écriture :")
     print("   https://huggingface.co/settings/tokens → Create new token → type « Write »\n")
-    token = getpass.getpass("Colle ton token Hugging Face (il ne s'affiche pas) puis Entrée : ").strip()
+    token = input("Colle ton token Hugging Face (clic droit) puis Entrée : ").strip()
     if not token.startswith("hf_"):
         sys.exit("❌ Ce n'est pas un token Hugging Face (il doit commencer par hf_).")
 
@@ -48,7 +47,7 @@ def main() -> None:
         print("⚠️  Pas de clé Claude dans .env : les moments seront choisis en mode basique.")
     if not secrets["GROQ_API_KEY"].startswith("gsk_"):
         print("⚠️  Pas de clé Groq dans .env : la transcription sera lente.")
-    pw = getpass.getpass("\nChoisis un mot de passe pour ton site (Entrée = pas de mot de passe) : ").strip()
+    pw = input("\nChoisis un mot de passe pour ton site (Entrée = pas de mot de passe) : ").strip()
     if pw:
         secrets["APP_PASSWORD"] = pw
     cookies = ROOT / "cookies.txt"
