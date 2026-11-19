@@ -7,6 +7,7 @@ sudo apt install -y ffmpeg python3-venv python3-full
 python3 -m venv .venv
 .venv/bin/pip install --upgrade pip
 .venv/bin/pip install -r requirements.txt
+./install_deno.sh || true   # moteur JavaScript exigé par YouTube
 [ -f .env ] || cp .env.example .env
 echo
 echo "✅ Installation terminée."
