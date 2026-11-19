@@ -7,7 +7,8 @@ from pathlib import Path
 FONT = os.getenv("SUBTITLE_FONT", "Inter")
 WORDS_PER_LINE = 3
 HIGHLIGHT = "&H0000E5FF&"  # jaune (format ASS : &HAABBGGRR)
-MAX_GAP = 0.6  # un blanc plus long coupe le groupe de mots
+MAX_GAP = 0.6
+MAX_CHARS = 16  # au-delà, la ligne passerait sur 2 lignes à l'écran  # un blanc plus long coupe le groupe de mots
 
 
 def _ts(t: float) -> str:
@@ -24,7 +25,11 @@ def _clean(word: str) -> str:
 def write_ass(
     path: Path, words: list[dict], clip_start: float, clip_end: float, w: int, h: int,
     hook: str | None = None,
+    sub_pos: tuple[int, int] | None = None,
+    hook_pos: tuple[int, int] | None = None,
 ) -> None:
+    sub_tag = f"{{\\an5\\pos({sub_pos[0]},{sub_pos[1]})}}" if sub_pos else ""
+    hook_tag = f"{{\\an5\\pos({hook_pos[0]},{hook_pos[1]})}}" if hook_pos else ""
     words = [x for x in words if x["end"] > clip_start and x["start"] < clip_end]
 
     # Regroupe les mots en petites lignes
@@ -33,6 +38,7 @@ def write_ass(
         if (
             not groups
             or len(groups[-1]) >= WORDS_PER_LINE
+            or sum(len(w["word"]) + 1 for w in groups[-1]) + len(word["word"]) > MAX_CHARS
             or word["start"] - groups[-1][-1]["end"] > MAX_GAP
             or groups[-1][-1]["word"].endswith((".", "?", "!"))
         ):
@@ -56,13 +62,13 @@ def write_ass(
                     if j == i else text
                 )
             pop = "{\\t(0,80,\\fscx104\\fscy104)\\t(80,160,\\fscx100\\fscy100)}" if i == 0 else ""
-            events.append(f"Dialogue: 0,{_ts(start)},{_ts(end)},Main,,0,0,0,,{pop}{' '.join(parts)}")
+            events.append(f"Dialogue: 0,{_ts(start)},{_ts(end)},Main,,0,0,0,,{sub_tag}{pop}{' '.join(parts)}")
 
     if hook:
                 # Bandeau visible pendant les 4 premières secondes (le moment où on décide de scroller)
         hook_end = min(4.0, clip_end - clip_start)
         events.insert(0, f"Dialogue: 1,{_ts(0)},{_ts(hook_end)},Hook,,0,0,0,,"
-                         f"{{\\fad(120,300)}}{_clean(hook)}")
+                         f"{hook_tag}{{\\fad(120,300)}}{_clean(hook)}")
 
     header = f"""[Script Info]
 ScriptType: v4.00+

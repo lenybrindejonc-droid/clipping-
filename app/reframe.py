@@ -2,8 +2,8 @@
 
 - Détecteur de visages YuNet (réseau de neurones OpenCV, téléchargé une fois),
   avec repli sur Haar si le téléchargement échoue.
-- Mode « auto » : suit la personne si elle est seule à l'écran, sinon garde la
-  vidéo entière sur fond flou (podcast à deux, plan large, pas de visage).
+- Mode « auto » : écran partagé facecam/jeu pour le gaming, suit la personne si
+  elle est seule à l'écran, sinon vidéo entière sur fond flou.
 """
 from __future__ import annotations
 
@@ -15,6 +15,7 @@ SAMPLE_EVERY = 0.5       # secondes entre deux analyses d'image
 MOVE_THRESHOLD = 0.10    # fraction de la largeur avant de déplacer le cadre
 MIN_SHOT = 1.2           # durée minimale d'un plan fixe (s)
 TRANSITION = 0.30        # durée d'un mouvement de caméra (s)
+FACECAM_H = 700          # hauteur du bandeau facecam en mode gaming (sur 1920)
 DETECT_WIDTH = 640
 
 YUNET_URL = ("https://github.com/opencv/opencv_zoo/raw/main/models/"
@@ -42,7 +43,7 @@ def _get_detector():
             h, w = img.shape[:2]
             net.setInputSize((w, h))
             _, faces = net.detect(img)
-            return [] if faces is None else [(f[0] + f[2] / 2, f[2]) for f in faces]
+            return [] if faces is None else [(f[0] + f[2] / 2, f[1] + f[3] / 2, f[2]) for f in faces]
 
         _detector = yunet
     except Exception as exc:
@@ -53,14 +54,14 @@ def _get_detector():
         def haar(img):
             gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
             faces = cascade.detectMultiScale(gray, 1.1, 8, minSize=(40, 40))
-            return [(x + w / 2, w) for x, y, w, h in faces]
+            return [(x + w / 2, y + h / 2, w) for x, y, w, h in faces]
 
         _detector = haar
     return _detector
 
 
-def _scan(src: Path, start: float, end: float) -> list[tuple[float, list[tuple[float, float]]]]:
-    """Pour chaque instant échantillonné : visages (centre x, largeur) en pixels source."""
+def _scan(src: Path, start: float, end: float) -> list[tuple[float, list[tuple[float, float, float]]]]:
+    """Pour chaque instant échantillonné : visages (centre x, centre y, largeur) en pixels source."""
     import cv2
 
     detect = _get_detector()
@@ -74,26 +75,62 @@ def _scan(src: Path, start: float, end: float) -> list[tuple[float, list[tuple[f
             break
         scale = DETECT_WIDTH / frame.shape[1]
         small = cv2.resize(frame, None, fx=scale, fy=scale)
-        faces = [(cx / scale, w / scale) for cx, w in detect(small)]
+        faces = [(cx / scale, cy / scale, w / scale) for cx, cy, w in detect(small)]
         # ignore les petits visages (public, arrière-plan)
         if faces:
-            biggest = max(w for _, w in faces)
-            faces = [f for f in faces if f[1] >= 0.45 * biggest]
+            biggest = max(f[2] for f in faces)
+            faces = [f for f in faces if f[2] >= 0.45 * biggest]
         out.append((t - start, faces))
         t += SAMPLE_EVERY
     cap.release()
     return out
 
 
-def plan(src: Path, start: float, end: float, src_w: int, crop_w: int) -> str | None:
-    """Expression ffmpeg x(t) pour le recadrage, ou None si mieux vaut le plan large."""
+def _median(values: list[float]) -> float:
+    v = sorted(values)
+    return v[len(v) // 2]
+
+
+def _facecam(samples, src_w: int, src_h: int) -> tuple[int, int, int, int] | None:
+    """Détecte une facecam (petit visage fixe, typique du gaming) ; renvoie sa zone x, y, w, h."""
+    main = [max(f, key=lambda v: v[2]) for _, f in samples if f]
+    if len(main) < 0.4 * len(samples):
+        return None
+    fw = _median([f[2] for f in main])
+    cx, cy = _median([f[0] for f in main]), _median([f[1] for f in main])
+    steady = sum(abs(f[0] - cx) < 0.04 * src_w and abs(f[1] - cy) < 0.04 * src_h for f in main)
+    if fw > 0.13 * src_w or steady < 0.7 * len(main):
+        return None  # visage trop grand ou qui bouge : ce n'est pas une facecam
+    # Cadre autour du visage, au format du bandeau du haut (1080x700)
+    w = min(fw * 3.4, src_w)
+    h = min(w * FACECAM_H / 1080, src_h)
+    w = h * 1080 / FACECAM_H
+    x = min(max(cx - w / 2, 0), src_w - w)
+    y = min(max(cy - h * 0.45, 0), src_h - h)
+    return int(x) // 2 * 2, int(y) // 2 * 2, int(w) // 2 * 2, int(h) // 2 * 2
+
+
+def analyze(src: Path, start: float, end: float, src_w: int, src_h: int, crop_w: int,
+            allow_facecam: bool = True) -> tuple[str, object]:
+    """Choisit la mise en page : ("track", expr x(t)), ("facecam", zone) ou ("wide", None)."""
     try:
         samples = _scan(src, start, end)
     except Exception as exc:
         print(f"[reframe] analyse impossible ({exc})")
-        return None
+        return "wide", None
     if not samples:
-        return None
+        return "wide", None
+    if allow_facecam:
+        box = _facecam(samples, src_w, src_h)
+        if box:
+            return "facecam", box
+    expr = _track(samples, src_w, crop_w)
+    return ("track", expr) if expr is not None else ("wide", None)
+
+
+def _track(samples, src_w: int, crop_w: int) -> str | None:
+    """Expression ffmpeg x(t) qui suit la personne, ou None si mieux vaut le plan large."""
+    samples = [(t, [(f[0], f[2]) for f in faces]) for t, faces in samples]
 
     with_face = [f for _, f in samples if f]
     multi = [f for f in with_face if max(c for c, _ in f) - min(c for c, _ in f) > crop_w * 0.8]

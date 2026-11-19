@@ -38,7 +38,7 @@ class JobRequest(BaseModel):
     num_clips: int = Field(5, ge=1, le=20)
     min_duration: int = Field(15, ge=5, le=120)
     max_duration: int = Field(40, ge=10, le=180)
-    layout: str = Field("auto", pattern="^(auto|crop|blur)$")
+    layout: str = Field("auto", pattern="^(auto|crop|blur|gaming)$")
     subtitles: bool = True
     language: str | None = None
 

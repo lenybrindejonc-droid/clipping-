@@ -170,16 +170,33 @@ def render_clip(
     src_w, src_h = probe_size(src)
     filters: list[str] = []
 
-    x_expr = None
     crop_w = int(src_h * OUT_W / OUT_H) // 2 * 2
-    if layout in ("auto", "crop") and src_w / src_h > OUT_W / OUT_H:
-        x_expr = reframe.plan(src, start, end, src_w, crop_w)
-        if x_expr is None and layout == "crop":
-            x_expr = str((src_w - crop_w) // 2)  # recadrage centré forcé
+    mode, data = "wide", None
+    if layout != "blur" and src_w / src_h > OUT_W / OUT_H:
+        mode, data = reframe.analyze(src, start, end, src_w, src_h, crop_w,
+                                     allow_facecam=layout in ("auto", "gaming"))
+        if mode == "wide" and layout in ("crop", "gaming"):
+            mode, data = "track", str((src_w - crop_w) // 2)  # recadrage centré forcé
 
     sharpen = "unsharp=5:5:0.6:5:5:0"
-    if x_expr is not None:
-        base = (f"[0:v]crop=w={crop_w}:h={src_h}:x='{x_expr}':y=0,"
+    sub_pos = hook_pos = None
+    if mode == "facecam":
+        # Écran partagé : facecam en haut, jeu (centre de l'image) en bas
+        fx, fy, fw, fh = data
+        top_h = reframe.FACECAM_H
+        bot_h = OUT_H - top_h
+        gw = int(src_h * OUT_W / bot_h) // 2 * 2
+        gx = (src_w - gw) // 2
+        base = (
+            f"[0:v]split[a][b];"
+            f"[a]crop={fw}:{fh}:{fx}:{fy},scale={OUT_W}:{top_h}:flags=lanczos[top];"
+            f"[b]crop={gw}:{src_h}:{gx}:0,scale={OUT_W}:{bot_h}:flags=lanczos,{sharpen}[bot];"
+            f"[top][bot]vstack,setsar=1"
+        )
+        sub_pos = (OUT_W // 2, top_h)            # sous-titres sur la jonction
+        hook_pos = (OUT_W // 2, OUT_H - 260)     # accroche en bas, sur le jeu
+    elif mode == "track":
+        base = (f"[0:v]crop=w={crop_w}:h={src_h}:x='{data}':y=0,"
                 f"scale={OUT_W}:{OUT_H}:flags=lanczos,{sharpen},setsar=1")
     else:
         # Vidéo entière centrée (zoomée) sur fond flou — flou calculé en petit = rapide
@@ -194,7 +211,8 @@ def render_clip(
 
     if (subtitles and words) or hook:
         ass = out.with_suffix(".ass")
-        write_ass(ass, words if subtitles else [], start, end, OUT_W, OUT_H, hook=hook)
+        write_ass(ass, words if subtitles else [], start, end, OUT_W, OUT_H, hook=hook,
+                  sub_pos=sub_pos, hook_pos=hook_pos)
         filters.append(f"ass={ass.name}")
 
     vf = ",".join(filters) + "[v]"
