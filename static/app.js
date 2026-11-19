@@ -52,7 +52,7 @@ $("send-file").addEventListener("click", () => {
     if (e.lengthComputable) {
       const pct = (e.loaded / e.total) * 100;
       $("up-fill").style.width = `${pct}%`;
-      $("file-name").textContent = `Envoi… ${pct.toFixed(0)} %`;
+      $("file-name").textContent = `Envoi… ${pct.toFixed(0)} % — garde cet onglet ouvert`;
     }
   };
   xhr.onload = () => {

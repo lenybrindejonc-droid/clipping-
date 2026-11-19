@@ -51,14 +51,14 @@
       <div class="or"><span>ou</span></div>
       <div class="upload">
         <label class="file-label">
-          <input id="file" type="file" accept="video/*" hidden />
-          <span class="btn ghost">📁 Choisir une vidéo sur mon ordinateur</span>
+          <input id="file" type="file" accept="video/*,.mp4,.mov,.m4v,.mkv,.webm" hidden />
+          <span class="btn ghost">📁 Choisir une vidéo (téléphone ou ordinateur)</span>
         </label>
         <p id="file-name" class="muted small" hidden></p>
         <button id="send-file" type="button" class="btn" hidden>Envoyer et générer les shorts</button>
         <div id="up-bar" class="bar" hidden><div id="up-fill"></div></div>
-        <p class="muted small">À utiliser si YouTube bloque le serveur : télécharge la vidéo sur ton
-          ordinateur, puis envoie-la ici.</p>
+        <p class="muted small">À utiliser si le lien YouTube ne marche pas : récupère la vidéo sur ton
+          appareil, puis envoie-la ici. Garde l'onglet ouvert pendant l'envoi.</p>
       </div>
       <p id="error" class="error" hidden></p>
     </form>
