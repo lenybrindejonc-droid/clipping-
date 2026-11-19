@@ -42,10 +42,10 @@ def check() -> str:
 
 
 def _post(audio: Path, language: str | None) -> dict:
-    data = [("model", MODEL), ("response_format", "verbose_json"),
-            ("timestamp_granularities[]", "word"), ("timestamp_granularities[]", "segment")]
+    data: dict = {"model": MODEL, "response_format": "verbose_json",
+                  "timestamp_granularities[]": ["word", "segment"]}
     if language:
-        data.append(("language", language))
+        data["language"] = language
     headers = {"Authorization": f"Bearer {os.environ['GROQ_API_KEY'].strip()}"}
     for attempt in range(5):
         with audio.open("rb") as f:
