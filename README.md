@@ -58,7 +58,10 @@ static/            interface web
 - Publication directe via les API TikTok / YouTube.
 - Comptes utilisateurs + file de tâches (Redis/Celery) pour un déploiement public.
 
-## Mettre en ligne sur Hugging Face (gratuit, privé)
+## Mettre en ligne sur Hugging Face (privé — abonnement PRO requis)
+
+⚠️ Depuis 2026, Hugging Face réserve les Docker Spaces aux comptes PRO (~9 $/mois) ;
+les Spaces gratuits n'acceptent que des pages statiques.
 
 ```bash
 ./deploy_hf.sh

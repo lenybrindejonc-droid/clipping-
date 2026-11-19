@@ -36,7 +36,17 @@ def main() -> None:
     print(f"\n👤 Connecté en tant que {user}")
 
     # 1. Space privé
-    api.create_repo(repo_id, repo_type="space", space_sdk="docker", private=True, exist_ok=True)
+    try:
+        api.create_repo(repo_id, repo_type="space", space_sdk="docker", private=True, exist_ok=True)
+    except Exception as exc:
+        if "402" in str(exc) or "Payment Required" in str(exc):
+            sys.exit(
+                "\n❌ Hugging Face demande un abonnement PRO (~9 $/mois) pour héberger ce type de site.\n"
+                "   Les Spaces gratuits ne permettent que des pages statiques.\n"
+                "   → S'abonner : https://huggingface.co/pro\n"
+                "   → Ou garder le site sur ton PC avec ./start.sh"
+            )
+        raise
     if not api.repo_info(repo_id, repo_type="space").private:
         api.update_repo_settings(repo_id, private=True, repo_type="space")
     print("🔒 Space privé créé :", repo_id)
