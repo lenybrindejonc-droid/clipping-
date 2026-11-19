@@ -7,8 +7,33 @@ from pathlib import Path
 FONT = os.getenv("SUBTITLE_FONT", "Inter")
 WORDS_PER_LINE = 3
 HIGHLIGHT = "&H0000E5FF&"  # jaune (format ASS : &HAABBGGRR)
-MAX_GAP = 0.6
-MAX_CHARS = 16  # au-delà, la ligne passerait sur 2 lignes à l'écran  # un blanc plus long coupe le groupe de mots
+MAX_GAP = 0.6    # un blanc plus long coupe le groupe de mots
+MAX_CHARS = 16   # au-delà, la ligne passerait sur 2 lignes à l'écran
+# Petit retard : un sous-titre légèrement en retard se remarque moins qu'un en avance
+DELAY = float(os.getenv("SUBTITLE_DELAY", "0.08"))
+HOLD = 0.35      # le dernier mot d'une phrase reste un peu après avoir été prononcé
+
+
+def _fix_timing(words: list[dict]) -> list[dict]:
+    """Corrige les horodatages de Whisper.
+
+    - supprime les doublons (même mot compté deux fois) ;
+    - Whisper fait souvent « commencer » un mot pendant le silence qui le précède,
+      d'où des sous-titres en avance : on raccourcit les mots anormalement longs par le début ;
+    - garantit un ordre strict, sans chevauchement.
+    """
+    out: list[dict] = []
+    for w in sorted(words, key=lambda x: (x["start"], x["end"])):
+        if out and w["word"] == out[-1]["word"] and abs(w["start"] - out[-1]["start"]) < 0.3:
+            continue
+        start, end = w["start"], max(w["end"], w["start"] + 0.05)
+        longest = min(0.15 + 0.08 * len(w["word"]), 1.2)
+        if end - start > longest:
+            start = end - longest
+        if out:
+            start = max(start, out[-1]["start"] + 0.05)
+        out.append({**w, "start": start + DELAY, "end": max(end, start + 0.05) + DELAY})
+    return out
 
 
 def _ts(t: float) -> str:
@@ -30,7 +55,7 @@ def write_ass(
 ) -> None:
     sub_tag = f"{{\\an5\\pos({sub_pos[0]},{sub_pos[1]})}}" if sub_pos else ""
     hook_tag = f"{{\\an5\\pos({hook_pos[0]},{hook_pos[1]})}}" if hook_pos else ""
-    words = [x for x in words if x["end"] > clip_start and x["start"] < clip_end]
+    words = [x for x in _fix_timing(words) if x["end"] > clip_start and x["start"] < clip_end]
 
     # Regroupe les mots en petites lignes
     groups: list[list[dict]] = []
@@ -45,15 +70,13 @@ def write_ass(
             groups.append([])
         groups[-1].append(word)
 
-    events = []
+    # (début, fin, texte) pour chaque mot ; une seule ligne à l'écran à la fois
+    timeline: list[list] = []
     for group in groups:
         for i, word in enumerate(group):
             start = word["start"] - clip_start
             # le mot reste affiché jusqu'au début du suivant (pas de clignotement)
-            end = (group[i + 1]["start"] if i + 1 < len(group) else word["end"]) - clip_start
-            end = min(end, clip_end - clip_start)
-            if end <= start:
-                continue
+            end = (group[i + 1]["start"] if i + 1 < len(group) else word["end"] + HOLD) - clip_start
             parts = []
             for j, other in enumerate(group):
                 text = _clean(other["word"])
@@ -62,10 +85,18 @@ def write_ass(
                     if j == i else text
                 )
             pop = "{\\t(0,80,\\fscx104\\fscy104)\\t(80,160,\\fscx100\\fscy100)}" if i == 0 else ""
-            events.append(f"Dialogue: 0,{_ts(start)},{_ts(end)},Main,,0,0,0,,{sub_tag}{pop}{' '.join(parts)}")
+            timeline.append([max(start, 0.0), end, f"{sub_tag}{pop}{' '.join(parts)}"])
+
+    events = []
+    for k, (start, end, text) in enumerate(timeline):
+        if k + 1 < len(timeline):
+            end = min(end, timeline[k + 1][0])  # jamais deux sous-titres superposés
+        end = min(end, clip_end - clip_start)
+        if end - start >= 0.04:
+            events.append(f"Dialogue: 0,{_ts(start)},{_ts(end)},Main,,0,0,0,,{text}")
 
     if hook:
-                # Bandeau visible pendant les 4 premières secondes (le moment où on décide de scroller)
+        # Bandeau visible pendant les 4 premières secondes (le moment où on décide de scroller)
         hook_end = min(4.0, clip_end - clip_start)
         events.insert(0, f"Dialogue: 1,{_ts(0)},{_ts(hook_end)},Hook,,0,0,0,,"
                          f"{hook_tag}{{\\fad(120,300)}}{_clean(hook)}")

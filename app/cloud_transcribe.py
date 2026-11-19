@@ -80,14 +80,17 @@ def transcribe(path: Path, duration: float, progress, language: str | None = Non
             lang = lang or res.get("language")
             words = [{"start": round(w["start"] + offset, 2), "end": round(w["end"] + offset, 2),
                       "word": w["word"].strip()} for w in res.get("words") or [] if w["word"].strip()]
-            for s in res.get("segments") or []:
-                start, end = s["start"] + offset, s["end"] + offset
-                text = s["text"].strip()
-                if not text:
-                    continue
+            segs = [s for s in res.get("segments") or [] if s["text"].strip()]
+            # chaque mot va dans UN seul segment (évite les mots en double)
+            buckets: list[list[dict]] = [[] for _ in segs]
+            for w in words:
+                idx = next((k for k, s in enumerate(segs) if w["start"] < s["end"] + offset), len(segs) - 1)
+                if idx >= 0:
+                    buckets[idx].append(w)
+            for s, ws in zip(segs, buckets):
                 segments.append({
-                    "start": round(start, 2), "end": round(end, 2), "text": text,
-                    "words": [w for w in words if start - 0.05 <= w["start"] < end],
+                    "start": round(s["start"] + offset, 2), "end": round(s["end"] + offset, 2),
+                    "text": s["text"].strip(), "words": ws,
                 })
     progress(1.0, "Transcription terminée")
     return {"language": (lang or "").lower() or None, "segments": segments}

@@ -102,7 +102,7 @@ def _facecam(samples, src_w: int, src_h: int) -> tuple[int, int, int, int] | Non
     if fw > 0.13 * src_w or steady < 0.7 * len(main):
         return None  # visage trop grand ou qui bouge : ce n'est pas une facecam
     # Cadre autour du visage, au format du bandeau du haut (1080x700)
-    w = min(fw * 3.4, src_w)
+    w = min(fw * 4.0, src_w)  # pas trop serré : moins de zoom = image plus nette
     h = min(w * FACECAM_H / 1080, src_h)
     w = h * 1080 / FACECAM_H
     x = min(max(cx - w / 2, 0), src_w - w)

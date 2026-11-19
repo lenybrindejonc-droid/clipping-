@@ -24,6 +24,7 @@ $("form").addEventListener("submit", async (e) => {
         max_duration: +$("max").value,
         layout: $("layout").value,
         subtitles: $("subs").checked,
+        high_quality: $("hq").checked,
         language: $("lang").value || null,
       }),
     });

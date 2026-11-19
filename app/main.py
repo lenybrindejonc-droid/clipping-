@@ -40,6 +40,7 @@ class JobRequest(BaseModel):
     max_duration: int = Field(40, ge=10, le=180)
     layout: str = Field("auto", pattern="^(auto|crop|blur|gaming)$")
     subtitles: bool = True
+    high_quality: bool = False
     language: str | None = None
 
 
@@ -90,7 +91,8 @@ def run_job(job_id: str) -> None:
     req = job["request"]
     work = JOBS / job_id
     try:
-        info = pipeline.download(req["url"], work, _progress(job_id, "download"))
+        info = pipeline.download(req["url"], work, _progress(job_id, "download"),
+                                 req.get("high_quality", False))
         _update(job_id, title=info["title"], channel=info["channel"], duration=info["duration"])
 
         tr = pipeline.transcribe(info["path"], _progress(job_id, "transcribe"), req.get("language"),
@@ -115,6 +117,7 @@ def run_job(job_id: str) -> None:
             pipeline.render_clip(
                 info["path"], work / name, m["start"], m["end"], words,
                 layout=req["layout"], subtitles=req["subtitles"], hook=m.get("hook"),
+                high_quality=req.get("high_quality", False),
             )
             clips.append({**m, "file": name, "thumb": name.replace(".mp4", ".jpg"),
                           "duration": round(m["end"] - m["start"], 1)})

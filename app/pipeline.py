@@ -25,7 +25,7 @@ def _strip(text: str) -> str:
     return re.sub(r"\x1b\[[0-9;]*m|\[[0-9;]*m", "", text).replace("ERROR:", "").strip()
 
 
-def download(url: str, workdir: Path, progress: Progress) -> dict:
+def download(url: str, workdir: Path, progress: Progress, high_quality: bool = False) -> dict:
     """Télécharge la vidéo YouTube (≤1080p) en mp4."""
     import yt_dlp
 
@@ -41,6 +41,9 @@ def download(url: str, workdir: Path, progress: Progress) -> dict:
         "bv*[vcodec^=avc1][height<=1080]+ba[ext=m4a]/b[vcodec^=avc1][height<=1080]",
         "b[ext=mp4][height<=1080]/18/b",
     ]
+    if high_quality:
+        # 1440p (VP9/AV1) : image bien plus nette après zoom, mais plus long à traiter
+        formats.insert(0, "bv*[vcodec^=vp09][height<=1440][height>1080]+ba/bv*[vcodec^=vp9][height<=1440][height>1080]+ba")
     last_exc: Exception | None = None
     for fmt in formats:
         for f in workdir.glob("source.*"):
@@ -164,6 +167,7 @@ def render_clip(
     layout: str = "auto",
     subtitles: bool = True,
     hook: str | None = None,
+    high_quality: bool = False,
 ) -> None:
     """Découpe [start, end], recadre en 9:16 et incruste les sous-titres."""
     duration = end - start
@@ -189,7 +193,8 @@ def render_clip(
         gx = (src_w - gw) // 2
         base = (
             f"[0:v]split[a][b];"
-            f"[a]crop={fw}:{fh}:{fx}:{fy},scale={OUT_W}:{top_h}:flags=lanczos[top];"
+            f"[a]crop={fw}:{fh}:{fx}:{fy},hqdn3d=1.5:1.5:3:3,scale={OUT_W}:{top_h}:flags=lanczos,"
+            f"unsharp=5:5:1.0:5:5:0.0[top];"
             f"[b]crop={gw}:{src_h}:{gx}:0,scale={OUT_W}:{bot_h}:flags=lanczos,{sharpen}[bot];"
             f"[top][bot]vstack,setsar=1"
         )
@@ -220,7 +225,7 @@ def render_clip(
         "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
         "-ss", f"{start:.3f}", "-t", f"{duration:.3f}", "-i", str(src.resolve()),
         "-filter_complex", vf, "-map", "[v]", "-map", "0:a?",
-        "-c:v", "libx264", "-preset", X264_PRESET, "-threads", "0", "-crf", "20", "-pix_fmt", "yuv420p",
+        "-c:v", "libx264", "-preset", X264_PRESET, "-threads", "0", "-crf", "18" if high_quality else "20", "-pix_fmt", "yuv420p",
         "-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart",
         out.name,
     ]
