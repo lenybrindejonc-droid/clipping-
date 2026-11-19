@@ -42,6 +42,20 @@ BUSY = ("download", "transcribe", "analyze", "render")
 
 APP_PASSWORD = os.getenv("APP_PASSWORD", "").strip()
 AUTH_COOKIE = "clipping_auth"
+MAX_TRIES, BAN_SECONDS = 8, 900   # 8 essais ratés → 15 minutes de blocage
+_tries: dict[str, list[float]] = {}
+
+
+def _client_ip(request: Request) -> str:
+    fwd = request.headers.get("x-forwarded-for", "")
+    return (fwd.split(",")[0].strip() if fwd else (request.client.host if request.client else "?"))
+
+
+def _blocked(ip: str) -> bool:
+    now = time.time()
+    recent = [t for t in _tries.get(ip, []) if now - t < BAN_SECONDS]
+    _tries[ip] = recent
+    return len(recent) >= MAX_TRIES
 
 
 def _token() -> str:
@@ -65,13 +79,19 @@ async def require_password(request: Request, call_next):
         return await call_next(request)
     secure = request.headers.get("x-forwarded-proto", request.url.scheme) == "https"
     if request.url.path == "/login" and request.method == "POST":
+        ip = _client_ip(request)
+        if _blocked(ip):
+            return HTMLResponse(LOGIN_PAGE.replace(
+                "{error}", "<p>Trop d'essais. Réessaie dans 15 minutes.</p>"), status_code=429)
         form = parse_qs((await request.body()).decode(errors="ignore"))
         given = (form.get("password") or [""])[0]
         if hmac.compare_digest(given.encode(), APP_PASSWORD.encode()):
+            _tries.pop(ip, None)
             resp = RedirectResponse("/", status_code=303)
             resp.set_cookie(AUTH_COOKIE, _token(), max_age=30 * 86400, httponly=True,
                             secure=secure, samesite="none" if secure else "lax")
             return resp
+        _tries.setdefault(ip, []).append(time.time())
         await asyncio.sleep(1)  # ralentit les essais au hasard
         return HTMLResponse(LOGIN_PAGE.replace("{error}", "<p>Mot de passe incorrect.</p>"), status_code=401)
     if hmac.compare_digest(request.cookies.get(AUTH_COOKIE, ""), _token()):
