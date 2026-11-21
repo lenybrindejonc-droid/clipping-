@@ -45,48 +45,97 @@ $("file").addEventListener("change", () => {
   if (f) $("file-name").textContent = `${f.name} — ${(f.size / 1048576).toFixed(0)} Mo`;
 });
 
+const CHUNK = 8 * 1024 * 1024;           // 8 Mo par morceau
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+let envoi = null;                        // { id, file } de l'envoi en cours
+
+function majEnvoi(recu, total) {
+  const pct = (recu / total) * 100;
+  $("up-fill").style.width = `${pct}%`;
+  $("file-name").textContent =
+    `Envoi… ${pct.toFixed(0)} % (${(recu / 1048576).toFixed(0)} / ${(total / 1048576).toFixed(0)} Mo)`;
+}
+
+async function envoyerMorceaux(id, file, depuis) {
+  let offset = depuis;
+  while (offset < file.size) {
+    const bout = file.slice(offset, offset + CHUNK);
+    let envoye = false;
+    for (let essai = 1; essai <= 4 && !envoye; essai++) {
+      try {
+        const r = await fetch(`/api/uploads/${id}?offset=${offset}`, { method: "PUT", body: bout });
+        const d = await r.json().catch(() => ({}));
+        if (r.ok || r.status === 409) {        // 409 = on reprend à la position du serveur
+          offset = d.received ?? offset;
+          envoye = true;
+        } else if (r.status === 400 || r.status === 404) {
+          throw new Error(d.detail || "Envoi refusé.");
+        }
+      } catch (err) {
+        if (err.message && !err.message.includes("Failed to fetch")) throw err;
+      }
+      if (!envoye) await sleep(1500 * essai);  // coupure réseau : on patiente puis on réessaie
+    }
+    if (!envoye) throw new Error("coupure");
+    majEnvoi(offset, file.size);
+  }
+}
+
+async function demarrerEnvoi(file, reprise = false) {
+  $("error").hidden = true;
+  $("send-file").disabled = true;
+  $("resume-file").hidden = true;
+  $("up-bar").hidden = false;
+  try {
+    if (!reprise || !envoi) {
+      const r = await fetch("/api/uploads", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ filename: file.name, size: file.size, params: params() }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(typeof d.detail === "string" ? d.detail : "Envoi impossible.");
+      envoi = { id: d.upload_id, file };
+    }
+    const etat = await (await fetch(`/api/uploads/${envoi.id}`)).json();
+    await envoyerMorceaux(envoi.id, file, etat.received || 0);
+
+    $("file-name").textContent = "Envoi terminé ✓ — vérification…";
+    const fin = await fetch(`/api/uploads/${envoi.id}/finish`, { method: "POST" });
+    const job = await fin.json();
+    if (!fin.ok) throw new Error(typeof job.detail === "string" ? job.detail : "Fichier refusé.");
+    envoi = null;
+    $("up-bar").hidden = true;
+    $("up-fill").style.width = "0%";
+    $("file-name").textContent = "Envoi terminé ✓";
+    openJob(job.id);
+    loadHistory();
+  } catch (err) {
+    $("up-bar").hidden = true;
+    if (err.message === "coupure") {
+      showError("Connexion interrompue. Rien n'est perdu : clique sur « Reprendre l'envoi ».");
+      $("resume-file").hidden = false;
+    } else {
+      showError(err.message);
+      envoi = null;
+    }
+  } finally {
+    $("send-file").disabled = false;
+  }
+}
+
 $("send-file").addEventListener("click", () => {
   const f = $("file").files[0];
   if (!f) return;
   const probleme = checkParams();
   if (probleme) { showError(probleme); return; }   // on n'envoie pas le fichier pour rien
-  $("error").hidden = true;
-  $("send-file").disabled = true;
-  $("up-bar").hidden = false;
+  envoi = null;
+  demarrerEnvoi(f);
+});
 
-  const data = new FormData();
-  data.append("params", JSON.stringify(params()));
-  data.append("file", f);
-
-  const xhr = new XMLHttpRequest();
-  xhr.open("POST", "/api/jobs/upload");
-  xhr.upload.onprogress = (e) => {
-    if (e.lengthComputable) {
-      const pct = (e.loaded / e.total) * 100;
-      $("up-fill").style.width = `${pct}%`;
-      $("file-name").textContent = `Envoi… ${pct.toFixed(0)} % — garde cet onglet ouvert`;
-    }
-  };
-  xhr.onload = () => {
-    $("send-file").disabled = false;
-    $("up-bar").hidden = true;
-    $("up-fill").style.width = "0%";
-    let data2 = {};
-    try { data2 = JSON.parse(xhr.responseText); } catch (_) {}
-    if (xhr.status >= 200 && xhr.status < 300) {
-      $("file-name").textContent = "Envoi terminé ✓";
-      openJob(data2.id);
-      loadHistory();
-    } else {
-      showError(typeof data2.detail === "string" ? data2.detail : "L'envoi a échoué.");
-    }
-  };
-  xhr.onerror = () => {
-    $("send-file").disabled = false;
-    $("up-bar").hidden = true;
-    showError("L'envoi a échoué (connexion interrompue). Réessaie.");
-  };
-  xhr.send(data);
+$("resume-file").addEventListener("click", () => {
+  const f = $("file").files[0];
+  if (f) demarrerEnvoi(f, true);
 });
 
 $("form").addEventListener("submit", async (e) => {

@@ -170,6 +170,16 @@ def probe_duration(path: Path) -> float:
         raise RuntimeError("fichier vidéo illisible ou incomplet") from None
 
 
+def probe_size(path: Path) -> tuple[int, int]:
+    out = subprocess.run(
+        ["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height",
+         "-of", "csv=p=0:s=x", str(path)],
+        capture_output=True, text=True, check=True,
+    )
+    w, h = out.stdout.strip().split("x")[:2]
+    return int(w), int(h)
+
+
 def _probe_video(path: Path) -> float:
     """Durée de la vidéo, ou RuntimeError avec le message exact de ffprobe."""
     probe = subprocess.run(

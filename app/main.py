@@ -430,40 +430,126 @@ def _drop_job(job_id: str) -> None:
         futures.pop(job_id, None)
 
 
-@app.post("/api/jobs/upload")
-async def create_upload_job(params: str = Form(...), file: UploadFile = File(...)):
-    """Vidéo envoyée depuis l'ordinateur (quand YouTube bloque le serveur)."""
-    try:
-        req = JobRequest.model_validate_json(params)
-    except ValidationError as exc:
-        raise HTTPException(400, _explain_params(exc))
-    except Exception:
-        raise HTTPException(400, "Paramètres invalides.")
-    name = Path(file.filename or "video.mp4").name
-    ext = Path(name).suffix.lower()
+UPLOADS = DATA / "uploads"
+UPLOADS.mkdir(parents=True, exist_ok=True)
+MAX_UPLOAD = int(os.getenv("MAX_UPLOAD_GB", "8")) * (1 << 30)
+
+
+def _upload_dir(upload_id: str) -> Path:
+    if not re.fullmatch(r"[0-9a-f]{16}", upload_id):
+        raise HTTPException(404, "Envoi inconnu.")
+    d = UPLOADS / upload_id
+    if not d.is_dir():
+        raise HTTPException(404, "Envoi inconnu ou expire : recommence.")
+    return d
+
+
+def _clean_uploads() -> None:
+    """Supprime les envois abandonnes depuis plus de 24 h."""
+    for d in UPLOADS.glob("*"):
+        try:
+            if d.is_dir() and time.time() - d.stat().st_mtime > 86400:
+                shutil.rmtree(d, ignore_errors=True)
+        except OSError:
+            pass
+
+
+_clean_uploads()
+
+
+class UploadStart(BaseModel):
+    filename: str = Field(max_length=300)
+    size: int = Field(gt=0)
+    params: JobRequest
+
+
+@app.post("/api/uploads")
+def start_upload(start: UploadStart):
+    """Prepare un envoi par morceaux (reprise possible si la connexion coupe)."""
+    ext = Path(Path(start.filename).name).suffix.lower()
     if ext not in VIDEO_EXT:
         raise HTTPException(400, f"Format non reconnu ({ext or 'sans extension'}). "
                                  "Envoie un fichier .mp4, .mkv, .webm ou .mov.")
-    job = _new_job(req, {"url": None, "filename": Path(name).stem[:120]})
-    dest = JOBS / job["id"] / f"source{ext}"
-    try:
-        with dest.open("wb") as out:
-            while chunk := await file.read(4 << 20):
-                out.write(chunk)
-    except Exception as exc:
-        _drop_job(job["id"])
-        msg = "disque plein sur le serveur" if "space" in str(exc).lower() else str(exc)
-        raise HTTPException(500, f"Envoi interrompu ({msg}).")
+    if start.size > MAX_UPLOAD:
+        raise HTTPException(400, f"Fichier trop lourd ({start.size / (1 << 30):.1f} Go, "
+                                 f"maximum {MAX_UPLOAD // (1 << 30)} Go). "
+                                 "Decoupe-le en parties (script decouper.sh).")
+    libre = shutil.disk_usage(DATA).free
+    if libre < start.size * 1.6:
+        raise HTTPException(507, "Pas assez d'espace sur le serveur "
+                                 f"({libre / (1 << 30):.1f} Go libres). Envoie une video plus courte.")
+    upload_id = uuid.uuid4().hex[:16]
+    d = UPLOADS / upload_id
+    d.mkdir(parents=True)
+    (d / "meta.json").write_text(json.dumps({
+        "filename": Path(start.filename).name, "ext": ext, "size": start.size,
+        "params": start.params.model_dump(),
+    }, ensure_ascii=False))
+    (d / f"source{ext}").touch()
+    return {"upload_id": upload_id, "received": 0, "chunk_size": 1 << 24}
 
-    # Vérifie tout de suite que le fichier reçu est bien une vidéo lisible
+
+@app.get("/api/uploads/{upload_id}")
+def upload_state(upload_id: str):
+    d = _upload_dir(upload_id)
+    meta = json.loads((d / "meta.json").read_text())
+    return {"upload_id": upload_id, "received": (d / f"source{meta['ext']}").stat().st_size,
+            "size": meta["size"]}
+
+
+@app.put("/api/uploads/{upload_id}")
+async def upload_chunk(upload_id: str, request: Request, offset: int = 0):
+    """Ajoute un morceau a la suite ; si l'offset ne correspond pas, renvoie la position reelle."""
+    d = _upload_dir(upload_id)
+    meta = json.loads((d / "meta.json").read_text())
+    fichier = d / f"source{meta['ext']}"
+    recu = fichier.stat().st_size
+    if offset != recu:
+        return JSONResponse({"received": recu, "detail": "position desynchronisee"}, status_code=409)
+    try:
+        with fichier.open("ab") as out:
+            async for morceau in request.stream():
+                if recu + len(morceau) > meta["size"]:
+                    return JSONResponse({"received": recu,
+                                         "detail": "plus de donnees que la taille annoncee"},
+                                        status_code=400)
+                out.write(morceau)
+                recu += len(morceau)
+    except Exception as exc:
+        msg = "disque plein sur le serveur" if "space" in str(exc).lower() else "connexion interrompue"
+        return JSONResponse({"received": fichier.stat().st_size, "detail": f"Morceau non recu ({msg})."},
+                            status_code=500)
+    d.touch()
+    return {"received": fichier.stat().st_size, "size": meta["size"]}
+
+
+@app.post("/api/uploads/{upload_id}/finish")
+def finish_upload(upload_id: str):
+    """Verifie le fichier complet, puis lance le traitement."""
+    d = _upload_dir(upload_id)
+    meta = json.loads((d / "meta.json").read_text())
+    fichier = d / f"source{meta['ext']}"
+    recu = fichier.stat().st_size
+    if recu < meta["size"]:
+        manquant = (meta["size"] - recu) / 1048576
+        return JSONResponse({"received": recu,
+                             "detail": f"Envoi incomplet : il manque {manquant:.0f} Mo."},
+                            status_code=409)
+
+    job = _new_job(JobRequest(**meta["params"]),
+                   {"url": None, "filename": Path(meta["filename"]).stem[:120]})
+    dest = JOBS / job["id"] / f"source{meta['ext']}"
+    try:
+        fichier.replace(dest)            # deplacement instantane (meme disque)
+    except OSError:
+        shutil.move(str(fichier), str(dest))
+    shutil.rmtree(d, ignore_errors=True)
+
     try:
         pipeline.check_video(dest)
     except Exception as exc:
-        octets = dest.stat().st_size if dest.exists() else 0
-        taille = f"{octets / 1048576:.0f} Mo" if octets >= 1048576 else f"{octets // 1024} Ko"
         _drop_job(job["id"])
-        raise HTTPException(400, f"{exc} — {taille} reçus. "
-                                 "Relance l'envoi en gardant l'onglet ouvert.")
+        raise HTTPException(400, str(exc))
     futures[job["id"]] = executor.submit(run_job, job["id"])
     return job
 
