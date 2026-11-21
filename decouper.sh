@@ -3,13 +3,18 @@
 # Usage : ./decouper.sh ~/videos/ma_video.mp4 [minutes_par_partie]
 set -e
 cd "$(dirname "$0")"
-FICHIER="${1:-}"
 MINUTES="${2:-30}"
-if [ ! -f "$FICHIER" ]; then
-  echo 'Usage : ./decouper.sh ~/videos/ma_video.mp4 [minutes_par_partie]'
-  echo "Vidéos disponibles :"; ls -1sh ~/videos 2>/dev/null | tail -n +2 | head -10
+# Sans argument : on prend la vidéo la plus récente du dossier videos
+FICHIER="${1:-$(ls -t ~/videos/*.mp4 ~/videos/*.mkv ~/videos/*.webm 2>/dev/null | head -1)}"
+if [ -z "$FICHIER" ] || [ ! -f "$FICHIER" ]; then
+  echo "❌ Aucune vidéo trouvée dans le dossier videos."
+  echo "   Contenu actuel :"
+  ls -1sh ~/videos 2>/dev/null | tail -n +2 | head -10 || echo "   (le dossier n'existe pas encore)"
+  echo
+  echo "   Télécharge d'abord une vidéo :  ./telecharger.sh \"LIEN\""
   exit 1
 fi
+echo "📹 Vidéo : $FICHIER ($(du -h "$FICHIER" | cut -f1))"
 NOM=$(basename "${FICHIER%.*}")
 DEST=~/videos/parties
 mkdir -p "$DEST"
