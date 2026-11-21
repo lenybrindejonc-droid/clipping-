@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import os
 import shlex
+import shutil
 import subprocess
 import sys
 import threading
@@ -169,33 +170,68 @@ def probe_duration(path: Path) -> float:
         raise RuntimeError("fichier vidéo illisible ou incomplet") from None
 
 
-def check_video(path: Path) -> float:
-    """Vérifie qu'un fichier est une vidéo lisible ; renvoie sa durée en secondes."""
-    if not path.exists() or path.stat().st_size < 100_000:
-        raise RuntimeError("fichier vide ou trop petit : l'envoi a été interrompu")
+def _probe_video(path: Path) -> float:
+    """Durée de la vidéo, ou RuntimeError avec le message exact de ffprobe."""
     probe = subprocess.run(
         ["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries",
          "stream=codec_name:format=duration", "-of", "default=nw=1:nk=1", str(path)],
         capture_output=True, text=True,
     )
     lignes = [x for x in probe.stdout.split() if x]
-    if probe.returncode != 0 or not lignes:
-        raise RuntimeError("ce fichier n'est pas une vidéo lisible "
-                           "(envoi interrompu, ou format non reconnu)")
-    duration = probe_duration(path)
+    if probe.returncode != 0 or len(lignes) < 2:
+        err = " ".join(probe.stderr.split())
+        if "moov atom not found" in err:
+            raise RuntimeError("fichier incomplet : l'index de la vidéo, situé à la fin du "
+                               "fichier, n'est jamais arrivé. L'envoi s'est interrompu avant la fin")
+        raise RuntimeError(f"fichier illisible : {err[:160] or 'aucun flux vidéo trouvé'}")
+    try:
+        return float(lignes[-1])
+    except ValueError:
+        raise RuntimeError("fichier illisible : durée introuvable") from None
+
+
+def repair_video(path: Path) -> Path | None:
+    """Tente de récupérer une vidéo tronquée en la réassemblant (sans ré-encoder)."""
+    libre = shutil.disk_usage(path.parent).free
+    if libre < path.stat().st_size * 1.2:
+        print("[réparation] pas assez d'espace disque", flush=True)
+        return None
+    repare = path.with_name("repare.mp4")
+    subprocess.run(
+        ["ffmpeg", "-y", "-loglevel", "error", "-err_detect", "ignore_err",
+         "-i", str(path), "-c", "copy", "-movflags", "+faststart", str(repare)],
+        capture_output=True, text=True,
+    )
+    if repare.exists() and repare.stat().st_size > 100_000:
+        return repare
+    repare.unlink(missing_ok=True)
+    return None
+
+
+def check_video(path: Path, repair: bool = True) -> float:
+    """Vérifie qu'un fichier est une vidéo lisible ; renvoie sa durée en secondes."""
+    if not path.exists() or path.stat().st_size < 100_000:
+        raise RuntimeError("fichier vide ou trop petit : l'envoi a été interrompu")
+    try:
+        duration = _probe_video(path)
+    except RuntimeError:
+        if not repair:
+            raise
+        print("[réparation] fichier illisible, tentative de récupération…", flush=True)
+        repare = repair_video(path)
+        if repare is None:
+            raise
+        try:
+            duration = _probe_video(repare)
+        except RuntimeError:
+            repare.unlink(missing_ok=True)
+            raise
+        path.unlink(missing_ok=True)                 # la version réparée remplace l'originale
+        repare.rename(path.with_suffix(".mp4"))
+        print(f"[réparation] réussie : {duration:.0f} s récupérées", flush=True)
     if duration < 5:
         raise RuntimeError(f"vidéo trop courte ({duration:.0f} s) : l'envoi est sans doute incomplet")
     return duration
-
-
-def probe_size(path: Path) -> tuple[int, int]:
-    out = subprocess.run(
-        ["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height",
-         "-of", "csv=p=0:s=x", str(path)],
-        capture_output=True, text=True, check=True,
-    )
-    w, h = out.stdout.strip().split("x")[:2]
-    return int(w), int(h)
 
 
 def load_audio(path: Path):

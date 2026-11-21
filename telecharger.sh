@@ -32,7 +32,9 @@ fi
 
 mkdir -p ~/videos
 OUT="$HOME/videos/%(title).80s.%(ext)s"
-FORMAT='-S res:1080,vcodec:h264,ext:mp4 --merge-output-format mp4'
+QUALITE="${QUALITE:-1080}"   # QUALITE=720 ./telecharger.sh "lien"  → fichier 2 à 3 fois plus léger
+echo "📺 Qualité visée : ${QUALITE}p"
+FORMAT="-S res:${QUALITE},vcodec:h264,ext:mp4 --merge-output-format mp4"
 EJS=(--remote-components ejs:github)   # solveur des défis JavaScript de YouTube
 
 # Peu de tentatives : chaque essai raté rend YouTube plus méfiant envers ton adresse.

@@ -90,6 +90,17 @@ crée un Space **privé**, copie tes clés Claude/Groq du fichier `.env` dans le
 (jamais dans le code), propose un mot de passe pour le site, puis envoie le code.
 Relance la même commande pour mettre le site à jour.
 
+### Vidéos longues (plus de 1 h)
+
+Un envoi de plusieurs Go échoue souvent (il suffit d'une coupure). Deux parades :
+
+```bash
+QUALITE=720 ./telecharger.sh "lien"      # fichier 2 à 3 fois plus léger
+./decouper.sh ~/videos/ma_video.mp4 30   # découpe en parties de 30 min, sans ré-encoder
+```
+
+Chaque partie s'envoie séparément et donne ses propres clips.
+
 ### Envoyer une vidéo depuis son ordinateur
 
 Si YouTube refuse le téléchargement depuis le serveur, utilise le bouton
