@@ -11,6 +11,12 @@ SYSTEM = """Tu es un monteur expert en contenus courts viraux (TikTok, Reels, Yo
 On te donne la transcription horodatée d'une vidéo longue. Ta mission : repérer les passages
 qui feront les meilleurs shorts autonomes.
 
+Chaque ligne est au format [début-fin | E#] texte. E# est le niveau sonore du passage, de E0
+(calme) à E9 (très fort). Un E élevé signale des rires, des cris, une montée de ton, une
+réaction vive ou un moment d'action : ce sont souvent les meilleurs moments, et le texte seul
+ne les montre pas. Croise toujours les deux : un passage fort ET bien dit vaut mieux qu'un
+passage seulement bruyant. Un E bas n'est pas rédhibitoire si le propos est excellent.
+
 Un bon clip :
 - commence par un HOOK fort dès la première phrase (question, affirmation choc, chiffre, conflit,
   début d'histoire) — jamais au milieu d'une phrase ni par "et donc", "du coup", "voilà" ;
@@ -20,6 +26,16 @@ Un bon clip :
 
 Évite les intros/outros, les sponsors, les passages techniques sans contexte et les clips qui se
 chevauchent. Les timestamps doivent correspondre exactement aux bornes des segments fournis.
+
+Règles supplémentaires :
+- Les 3 premières secondes décident de tout : si la première phrase n'accroche pas seule,
+  recule le début jusqu'à une vraie phrase d'accroche, ou choisis un autre passage.
+- Répartis les clips sur toute la durée de la vidéo, sans en concentrer plusieurs sur la même
+  séquence. Un seul clip par moment fort.
+- Ne mets jamais un clip au milieu d'une phrase, ni au début ni à la fin.
+- Classe du plus fort au plus faible et sois sévère dans les notes : réserve 85+ aux passages
+  dont tu es certain, et n'hésite pas à descendre sous 50 un passage moyen.
+
 Le titre, le hook et la description sont dans la langue de la vidéo."""
 
 SCHEMA = {
@@ -50,8 +66,54 @@ SCHEMA = {
 }
 
 
+def _blocks(segments: list[dict], cible: float = 12.0) -> list[dict]:
+    """Regroupe les segments en blocs d'environ `cible` secondes.
+
+    Une vidéo de 3 h fait des milliers de lignes : les regrouper réduit fortement le coût
+    et donne à l'IA un texte plus lisible. Les bornes exactes sont recalées ensuite.
+    """
+    blocs: list[dict] = []
+    for s in segments:
+        if blocs and s["end"] - blocs[-1]["start"] <= cible:
+            b = blocs[-1]
+            b["end"] = s["end"]
+            b["text"] += " " + s["text"]
+            b["e"].append(s.get("e"))
+        else:
+            blocs.append({"start": s["start"], "end": s["end"], "text": s["text"],
+                          "e": [s.get("e")]})
+    for b in blocs:
+        niveaux = [x for x in b["e"] if x is not None]
+        # on garde le PIC du bloc : un éclat de rire ne doit pas être noyé par la moyenne
+        b["e"] = max(niveaux) if niveaux else None
+    return blocs
+
+
+def annotate_energy(segments: list[dict], energy: list[float], window: float = 1.0) -> None:
+    """Attribue à chaque segment un niveau sonore relatif de 0 à 9."""
+    if not energy or not segments:
+        return
+    import numpy as np
+
+    moyennes = []
+    for s in segments:
+        i0 = int(s["start"] / window)
+        i1 = max(int(s["end"] / window) + 1, i0 + 1)
+        part = energy[i0:i1]
+        moyennes.append(float(np.mean(part)) if len(part) else -60.0)
+    arr = np.array(moyennes)
+    rangs = arr.argsort().argsort()                      # position de chaque segment
+    niveaux = (rangs / max(len(arr) - 1, 1) * 9).round().astype(int)
+    for s, n in zip(segments, niveaux):
+        s["e"] = int(n)
+
+
 def _transcript_text(segments: list[dict]) -> str:
-    return "\n".join(f"[{s['start']:.1f}-{s['end']:.1f}] {s['text']}" for s in segments)
+    lignes = []
+    for s in _blocks(segments):
+        e = f" | E{s['e']}" if s.get("e") is not None else ""
+        lignes.append(f"[{s['start']:.1f}-{s['end']:.1f}{e}] {s['text'].strip()}")
+    return "\n".join(lignes)
 
 
 def ask_claude(segments, title, n, min_d, max_d) -> list[dict]:
@@ -69,7 +131,7 @@ def ask_claude(segments, title, n, min_d, max_d) -> list[dict]:
         system=SYSTEM,
         messages=[{"role": "user", "content": prompt}],
         thinking={"type": "adaptive"},
-        output_config={"effort": "medium", "format": {"type": "json_schema", "schema": SCHEMA}},
+        output_config={"effort": "high", "format": {"type": "json_schema", "schema": SCHEMA}},
         betas=["server-side-fallback-2026-07-01"],
         fallbacks="default",
     ) as stream:
@@ -142,9 +204,11 @@ def _snap(clips, segments, duration, min_d, max_d) -> list[dict]:
     return out
 
 
-def find_moments(segments, title, duration, n=8, min_d=20, max_d=60) -> tuple[list[dict], str]:
+def find_moments(segments, title, duration, n=8, min_d=20, max_d=60,
+                 energy: list[float] | None = None) -> tuple[list[dict], str, str]:
     if not segments:
-        return [], "aucune parole détectée"
+        return [], "aucune parole détectée", ""
+    annotate_energy(segments, energy or [])
     engine, note = "claude", ""
     try:
         if not (os.getenv("ANTHROPIC_API_KEY") or "").startswith("sk-ant-"):

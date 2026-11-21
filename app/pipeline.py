@@ -161,9 +161,31 @@ def _run_ytdlp(url: str, workdir: Path, fmt: str, progress: Progress,
 def probe_duration(path: Path) -> float:
     out = subprocess.run(
         ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(path)],
-        capture_output=True, text=True, check=True,
+        capture_output=True, text=True,
     )
-    return float(out.stdout.strip())
+    try:
+        return float(out.stdout.strip())
+    except ValueError:
+        raise RuntimeError("fichier vidéo illisible ou incomplet") from None
+
+
+def check_video(path: Path) -> float:
+    """Vérifie qu'un fichier est une vidéo lisible ; renvoie sa durée en secondes."""
+    if not path.exists() or path.stat().st_size < 100_000:
+        raise RuntimeError("fichier vide ou trop petit : l'envoi a été interrompu")
+    probe = subprocess.run(
+        ["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries",
+         "stream=codec_name:format=duration", "-of", "default=nw=1:nk=1", str(path)],
+        capture_output=True, text=True,
+    )
+    lignes = [x for x in probe.stdout.split() if x]
+    if probe.returncode != 0 or not lignes:
+        raise RuntimeError("ce fichier n'est pas une vidéo lisible "
+                           "(envoi interrompu, ou format non reconnu)")
+    duration = probe_duration(path)
+    if duration < 5:
+        raise RuntimeError(f"vidéo trop courte ({duration:.0f} s) : l'envoi est sans doute incomplet")
+    return duration
 
 
 def probe_size(path: Path) -> tuple[int, int]:
@@ -186,6 +208,43 @@ def load_audio(path: Path):
         capture_output=True, check=True,
     )
     return np.frombuffer(out.stdout, np.int16).astype(np.float32) / 32768.0
+
+
+def energy_profile(path: Path, window: float = 1.0) -> list[float]:
+    """Niveau sonore (dB) par tranche de `window` seconde.
+
+    Les rires, cris et montées de ton se voient dans ce profil : c'est ce qui permet
+    à l'IA de repérer les moments forts que le texte seul ne montre pas.
+    Lu en flux pour rester léger en mémoire, même sur une vidéo de 3 h.
+    """
+    import numpy as np
+
+    sr = 8000
+    samples = int(sr * window)
+    proc = subprocess.Popen(
+        ["ffmpeg", "-nostdin", "-loglevel", "error", "-i", str(path),
+         "-vn", "-ac", "1", "-ar", str(sr), "-f", "s16le", "-"],
+        stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+    )
+    levels: list[float] = []
+    buf = b""
+    try:
+        while True:
+            chunk = proc.stdout.read(samples * 2 * 32)
+            if not chunk:
+                break
+            buf += chunk
+            usable = len(buf) // (samples * 2) * (samples * 2)
+            if not usable:
+                continue
+            arr = np.frombuffer(buf[:usable], np.int16).astype(np.float32) / 32768.0
+            buf = buf[usable:]
+            rms = np.sqrt((arr.reshape(-1, samples) ** 2).mean(axis=1) + 1e-12)
+            levels.extend((20 * np.log10(rms)).tolist())
+    finally:
+        proc.stdout.close()
+        proc.wait()
+    return levels
 
 
 def transcribe(path: Path, progress: Progress, language: str | None = None,

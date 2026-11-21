@@ -184,10 +184,10 @@ def run_job(job_id: str) -> None:
         if req.get("url"):
             info = pipeline.download(req["url"], work, _progress(job_id, "download"),
                                      req.get("high_quality", False))
-        else:  # vidéo envoyée depuis l'ordinateur
+        else:  # vidéo envoyée depuis l'ordinateur ou le téléphone
             path = next(work.glob("source.*"))
             info = {"path": path, "title": req.get("filename") or "Vidéo envoyée",
-                    "duration": pipeline.probe_duration(path), "channel": ""}
+                    "duration": pipeline.check_video(path), "channel": ""}
         t0 = _chrono("téléchargement", t0)
         _update(job_id, title=info["title"], channel=info["channel"], duration=info["duration"])
 
@@ -196,10 +196,17 @@ def run_job(job_id: str) -> None:
         t0 = _chrono("transcription", t0)
         (work / "transcript.json").write_text(json.dumps(tr, ensure_ascii=False))
 
-        _progress(job_id, "analyze")(0, "L'IA cherche les moments les plus viraux…")
+        _progress(job_id, "analyze")(0, "Analyse du son (rires, cris, montées de ton)…")
+        try:
+            energie = pipeline.energy_profile(info["path"])
+        except Exception as exc:
+            print(f"[analyse] profil sonore indisponible ({exc})", flush=True)
+            energie = []
+
+        _progress(job_id, "analyze")(0.3, "L'IA cherche les moments les plus viraux…")
         moments, engine, note = find_moments(
             tr["segments"], info["title"], info["duration"],
-            req["num_clips"], req["min_duration"], req["max_duration"],
+            req["num_clips"], req["min_duration"], req["max_duration"], energie,
         )
         t0 = _chrono("analyse IA", t0)
         if not moments:
@@ -416,6 +423,13 @@ def _explain_params(exc: ValidationError) -> str:
 VIDEO_EXT = {".mp4", ".mkv", ".webm", ".mov", ".m4v", ".avi"}
 
 
+def _drop_job(job_id: str) -> None:
+    shutil.rmtree(JOBS / job_id, ignore_errors=True)
+    with lock:
+        jobs.pop(job_id, None)
+        futures.pop(job_id, None)
+
+
 @app.post("/api/jobs/upload")
 async def create_upload_job(params: str = Form(...), file: UploadFile = File(...)):
     """Vidéo envoyée depuis l'ordinateur (quand YouTube bloque le serveur)."""
@@ -437,11 +451,19 @@ async def create_upload_job(params: str = Form(...), file: UploadFile = File(...
             while chunk := await file.read(4 << 20):
                 out.write(chunk)
     except Exception as exc:
-        shutil.rmtree(JOBS / job["id"], ignore_errors=True)
-        with lock:
-            jobs.pop(job["id"], None)
-        msg = "disque plein" if "space" in str(exc).lower() else str(exc)
+        _drop_job(job["id"])
+        msg = "disque plein sur le serveur" if "space" in str(exc).lower() else str(exc)
         raise HTTPException(500, f"Envoi interrompu ({msg}).")
+
+    # Vérifie tout de suite que le fichier reçu est bien une vidéo lisible
+    try:
+        pipeline.check_video(dest)
+    except Exception as exc:
+        octets = dest.stat().st_size if dest.exists() else 0
+        taille = f"{octets / 1048576:.0f} Mo" if octets >= 1048576 else f"{octets // 1024} Ko"
+        _drop_job(job["id"])
+        raise HTTPException(400, f"{exc} — {taille} reçus. "
+                                 "Relance l'envoi en gardant l'onglet ouvert.")
     futures[job["id"]] = executor.submit(run_job, job["id"])
     return job
 
