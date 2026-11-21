@@ -22,6 +22,16 @@ function params() {
   };
 }
 
+// Vérifie les réglages AVANT d'envoyer le fichier (sinon on envoie pour rien)
+function checkParams() {
+  const p = params();
+  if (!(p.num_clips >= 1 && p.num_clips <= 30)) return "Nombre de clips : choisis une valeur entre 1 et 30.";
+  if (!(p.min_duration >= 5 && p.min_duration <= 120)) return "Durée minimum : entre 5 et 120 secondes.";
+  if (!(p.max_duration >= 10 && p.max_duration <= 180)) return "Durée maximum : entre 10 et 180 secondes.";
+  if (p.min_duration >= p.max_duration) return "La durée minimum doit être inférieure à la durée maximum.";
+  return null;
+}
+
 function showError(msg) {
   $("error").textContent = msg;
   $("error").hidden = false;
@@ -38,6 +48,8 @@ $("file").addEventListener("change", () => {
 $("send-file").addEventListener("click", () => {
   const f = $("file").files[0];
   if (!f) return;
+  const probleme = checkParams();
+  if (probleme) { showError(probleme); return; }   // on n'envoie pas le fichier pour rien
   $("error").hidden = true;
   $("send-file").disabled = true;
   $("up-bar").hidden = false;
@@ -79,6 +91,8 @@ $("send-file").addEventListener("click", () => {
 
 $("form").addEventListener("submit", async (e) => {
   e.preventDefault();
+  const probleme = checkParams();
+  if (probleme) { showError(probleme); return; }
   $("error").hidden = true;
   $("go").disabled = true;
   try {

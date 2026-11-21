@@ -21,7 +21,7 @@ from urllib.parse import parse_qs
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 from . import pipeline
 from .highlights import find_moments
@@ -106,7 +106,7 @@ YOUTUBE = re.compile(r"^https?://(www\.|m\.)?(youtube\.com|youtu\.be)/", re.I)
 
 class JobRequest(BaseModel):
     url: str | None = None
-    num_clips: int = Field(5, ge=1, le=20)
+    num_clips: int = Field(5, ge=1, le=30)
     min_duration: int = Field(15, ge=5, le=120)
     max_duration: int = Field(40, ge=10, le=180)
     layout: str = Field("auto", pattern="^(auto|crop|blur|gaming)$")
@@ -394,6 +394,25 @@ def create_job(req: JobRequest):
     return job
 
 
+LIMITES = {
+    "num_clips": ("Nombre de clips", 1, 30),
+    "min_duration": ("Durée minimum", 5, 120),
+    "max_duration": ("Durée maximum", 10, 180),
+}
+
+
+def _explain_params(exc: ValidationError) -> str:
+    """Message clair plutôt que « Paramètres invalides »."""
+    for err in exc.errors():
+        champ = err["loc"][0] if err["loc"] else ""
+        if champ in LIMITES:
+            nom, mini, maxi = LIMITES[champ]
+            return f"{nom} : choisis une valeur entre {mini} et {maxi}."
+        if champ == "layout":
+            return "Cadrage invalide."
+    return "Paramètres invalides."
+
+
 VIDEO_EXT = {".mp4", ".mkv", ".webm", ".mov", ".m4v", ".avi"}
 
 
@@ -402,6 +421,8 @@ async def create_upload_job(params: str = Form(...), file: UploadFile = File(...
     """Vidéo envoyée depuis l'ordinateur (quand YouTube bloque le serveur)."""
     try:
         req = JobRequest.model_validate_json(params)
+    except ValidationError as exc:
+        raise HTTPException(400, _explain_params(exc))
     except Exception:
         raise HTTPException(400, "Paramètres invalides.")
     name = Path(file.filename or "video.mp4").name
