@@ -30,8 +30,11 @@ else
   echo "ℹ️  Aucun fichier de cookies trouvé — on essaie sans."
 fi
 
-mkdir -p ~/videos
-OUT="$HOME/videos/%(title).80s.%(ext)s"
+mkdir -p ~/videos ~/videos/.encours
+# Les fichiers intermédiaires restent dans .encours : seule la vidéo terminée arrive
+# dans videos, pour ne plus confondre un téléchargement inachevé avec une vraie vidéo.
+OUT="%(title).80s.%(ext)s"
+CHEMINS=(-P "home:$HOME/videos" -P "temp:$HOME/videos/.encours")
 QUALITE="${QUALITE:-1080}"   # QUALITE=720 ./telecharger.sh "lien"  → fichier 2 à 3 fois plus léger
 echo "📺 Qualité visée : ${QUALITE}p"
 FORMAT="-S res:${QUALITE},vcodec:h264,ext:mp4 --merge-output-format mp4"
@@ -50,7 +53,7 @@ for client in $CLIENTS; do
     echo "▶️  Nouvelle tentative en se présentant comme : $client"
     ARGS=(--extractor-args "youtube:player_client=$client")
   fi
-  if .venv/bin/yt-dlp $FORMAT "${EJS[@]}" "${COOKIES[@]}" "${ARGS[@]}" -o "$OUT" "$1"; then
+  if .venv/bin/yt-dlp $FORMAT "${EJS[@]}" "${COOKIES[@]}" "${ARGS[@]}" "${CHEMINS[@]}" -o "$OUT" "$1"; then
     echo
     echo "✅ Vidéo enregistrée dans le dossier « videos »."
     ls -lh ~/videos | tail -3
@@ -63,6 +66,9 @@ done
 
 echo
 echo "❌ YouTube a refusé le téléchargement avec toutes les méthodes."
+if ls ~/videos/.encours/* >/dev/null 2>&1; then
+  echo "   💡 Un téléchargement précédent a laissé des morceaux : ./reparer.sh peut les assembler."
+fi
 if [ ${#COOKIES[@]} -eq 0 ]; then
   echo "   → Il te faut des cookies YouTube :"
   echo "     1. Dans Chrome, connecte-toi à YouTube (compte secondaire de préférence)."

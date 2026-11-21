@@ -90,6 +90,16 @@ crée un Space **privé**, copie tes clés Claude/Groq du fichier `.env` dans le
 (jamais dans le code), propose un mot de passe pour le site, puis envoie le code.
 Relance la même commande pour mettre le site à jour.
 
+### Téléchargement interrompu
+
+yt-dlp récupère l'image et le son séparément, puis les assemble. Si le téléchargement
+s'arrête avant cette fusion, il reste des fichiers `.fNNN.mp4`, `.fNNN.m4a` et `.temp.mp4`,
+tous inutilisables tels quels :
+
+```bash
+./reparer.sh     # assemble les morceaux complets, sans rien retélécharger
+```
+
 ### Vidéos longues (plus de 1 h)
 
 Un envoi de plusieurs Go échoue souvent (il suffit d'une coupure). Deux parades :

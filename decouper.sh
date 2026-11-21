@@ -5,7 +5,8 @@ set -e
 cd "$(dirname "$0")"
 MINUTES="${2:-30}"
 # Sans argument : on prend la vidéo la plus récente du dossier videos
-FICHIER="${1:-$(ls -t ~/videos/*.mp4 ~/videos/*.mkv ~/videos/*.webm 2>/dev/null | head -1)}"
+FICHIER="${1:-$(ls -t ~/videos/*.mp4 ~/videos/*.mkv ~/videos/*.webm 2>/dev/null \
+                 | grep -v -e '\.temp\.mp4$' -e '\.f[0-9]*\.' | head -1)}"
 if [ -z "$FICHIER" ] || [ ! -f "$FICHIER" ]; then
   echo "❌ Aucune vidéo trouvée dans le dossier videos."
   echo "   Contenu actuel :"
