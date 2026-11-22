@@ -32,20 +32,31 @@ Pour chaque clip, propose EXACTEMENT 3 accroches différentes (champ "hooks"), d
 maximum, avec une ligne expliquant pourquoi chacune peut marcher : une question, une
 affirmation, et une qui annonce le résultat sans le dévoiler. Mets la meilleure dans "hook".
 L'accroche doit tenir sa promesse : jamais de propos inventés, jamais de titre mensonger.
-STYLE DES ACCROCHES — à respecter strictement :
-« <streamer> <ce qu'il fait, au présent> dans <jeu><2 emojis> »
-Exemple de forme : « <streamer> se fait arrêter juste avant la planque dans <jeu>😳😳 »
+STYLE DES ACCROCHES — les 3 propositions doivent être de 3 STYLES DIFFÉRENTS, dans cet ordre.
 
-- Phrase déclarative à la 3e personne, au présent, qui DÉCRIT l'action sans la juger.
-- 6 à 12 mots, nom du streamer et nom du jeu compris.
-- Ponctuation normale, pas de majuscules d'imprimerie, pas de point final.
-- Pas de point d'interrogation, pas d'exclamation, pas de promesse du type « incroyable »
-  ou « tu ne vas pas y croire » : l'action suffit.
-- Ne dévoile jamais l'issue : « tente d'arrêter le train » et non « échoue à arrêter le train ».
-- Termine par exactement 2 emojis collés au dernier mot, choisis selon l'émotion
-  (😳😳 surprise, 😭😭 désespoir, 💀💀 échec, 🚨🚨 poursuite, 🔥🔥 exploit).
-- Les 3 accroches gardent ce format ; elles ne diffèrent que par l'action mise en avant
-  et les emojis.
+1) DESCRIPTIF (le style préféré, toujours en premier, et c'est lui qui va dans "hook")
+   Forme : « <streamer> <ce qu'il fait, au présent> dans <jeu><2 emojis> »
+   Exemple de forme : « <streamer> se fait arrêter juste avant la planque dans <jeu>😳😳 »
+   - Phrase déclarative à la 3e personne, au présent, qui DÉCRIT l'action sans la juger.
+   - 6 à 12 mots, nom du streamer et nom du jeu compris.
+   - Ponctuation normale, pas de majuscules d'imprimerie, pas de point final.
+   - Pas de point d'interrogation, pas d'exclamation, aucune promesse du type « incroyable »
+     ou « tu ne vas pas y croire » : l'action suffit.
+   - Ne dévoile jamais l'issue : « tente d'arrêter le train » et non « échoue à arrêter le train ».
+
+2) CITATION : une phrase réellement dite par le streamer dans le clip, entre guillemets,
+   courte et parlante, suivie de 2 emojis. Recopie ses mots exacts, sans les inventer ni les
+   corriger. Si aucune phrase ne se suffit à elle-même, propose plutôt le style 4 ci-dessous.
+
+3) QUESTION : une question courte posée au spectateur, qui pose l'enjeu sans donner la
+   réponse, suivie de 2 emojis. Exemple de forme : « Pourquoi il fonce vers le train ?😳😳 »
+
+4) (de remplacement, si la citation ne marche pas) RÉSULTAT : ce qui arrive, annoncé sans son
+   contexte, pour donner envie de comprendre. Exemple de forme : « Il a failli réussir💀💀 »
+
+Dans tous les cas : exactement 2 emojis collés au dernier mot, choisis selon l'émotion
+(😳😳 surprise, 😭😭 désespoir, 💀💀 échec, 🚨🚨 poursuite, 🔥🔥 exploit).
+Indique le style retenu dans le champ "style" de chaque accroche.
 
 Rédige aussi une légende par plateforme (champ "captions") :
 - tiktok : environ 150 caractères, 3 à 5 hashtags ;
@@ -85,14 +96,16 @@ SCHEMA = {
                     "hook": {"type": "string", "description": "la meilleure accroche, max 8 mots"},
                     "hooks": {
                         "type": "array",
-                        "description": "exactement 3 accroches différentes, de la meilleure à la moins bonne",
+                        "description": "exactement 3 accroches, de 3 styles différents, dans l'ordre imposé",
                         "items": {
                             "type": "object",
                             "properties": {
                                 "texte": {"type": "string", "description": "8 mots maximum"},
+                                "style": {"type": "string",
+                                          "description": "descriptif, citation, question ou resultat"},
                                 "pourquoi": {"type": "string", "description": "une ligne de justification"},
                             },
-                            "required": ["texte", "pourquoi"],
+                            "required": ["texte", "style", "pourquoi"],
                             "additionalProperties": False,
                         },
                     },

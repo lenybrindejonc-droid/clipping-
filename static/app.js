@@ -292,7 +292,8 @@ function buildCard(job, clip, i) {
       b.className = "hook-chip";
       b.innerHTML = `<b></b><span class="muted small"></span>`;
       b.querySelector("b").textContent = h.texte;
-      b.querySelector("span").textContent = h.pourquoi || "";
+      b.querySelector("span").textContent =
+        [h.style, h.pourquoi].filter(Boolean).join(" — ");
       b.addEventListener("click", async () => {
         await navigator.clipboard.writeText(h.texte);
         const champ = q(".e-hook");
