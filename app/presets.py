@@ -8,6 +8,7 @@ from __future__ import annotations
 PRESETS: dict[str, dict] = {
     "auto": {
         "nom": "Général",
+        "zoom": True,
         "n": 5, "min_d": 15, "max_d": 40, "layout": "auto",
         "sous_titres": {"mots": 3, "taille": 96, "hauteur": 0.27},
         "consignes": "",
@@ -15,6 +16,7 @@ PRESETS: dict[str, dict] = {
 
     "gaming": {
         "nom": "Gaming (stream, let's play)",
+        "zoom": True,
         "n": 5, "min_d": 20, "max_d": 40, "layout": "gaming",
         "sous_titres": {"mots": 3, "taille": 96, "hauteur": 0.27},
         "consignes": """CONTENU : partie de jeu (let's play, stream).
@@ -53,6 +55,7 @@ Mieux vaut 3 clips forts que 8 moyens.""",
 
     "podcast": {
         "nom": "Podcast / interview",
+        "zoom": False,
         "n": 6, "min_d": 25, "max_d": 60, "layout": "blur",
         "sous_titres": {"mots": 4, "taille": 86, "hauteur": 0.22},
         "consignes": """CONTENU : discussion, interview, podcast.
@@ -83,6 +86,7 @@ Si l'extrait peut être mal compris sorti de son contexte, ne le propose pas."""
 
     "vlog": {
         "nom": "Vlog / face caméra",
+        "zoom": True,
         "n": 5, "min_d": 20, "max_d": 45, "layout": "crop",
         "sous_titres": {"mots": 3, "taille": 92, "hauteur": 0.25},
         "consignes": """CONTENU : vlog, vidéo face caméra, récit personnel.
@@ -104,6 +108,7 @@ Titre : ce qui arrive, sans exagération.""",
 
     "tuto": {
         "nom": "Tuto / formation",
+        "zoom": False,
         "n": 6, "min_d": 25, "max_d": 60, "layout": "auto",
         "sous_titres": {"mots": 4, "taille": 86, "hauteur": 0.22},
         "consignes": """CONTENU : tutoriel, explication, formation.
@@ -127,6 +132,7 @@ Titre : l'astuce elle-même, concrètement.""",
 
     "humour": {
         "nom": "Humour / sketch",
+        "zoom": True,
         "n": 6, "min_d": 15, "max_d": 35, "layout": "auto",
         "sous_titres": {"mots": 3, "taille": 96, "hauteur": 0.27},
         "consignes": """CONTENU : humour, sketch, moments drôles.
@@ -148,6 +154,7 @@ Titre : factuel, la chute ne doit pas être dans le titre.""",
 
     "sport": {
         "nom": "Sport / performance",
+        "zoom": True,
         "n": 5, "min_d": 15, "max_d": 35, "layout": "blur",
         "sous_titres": {"mots": 3, "taille": 92, "hauteur": 0.25},
         "consignes": """CONTENU : sport, performance physique, compétition.

@@ -16,6 +16,8 @@ Chaîne de traitement (`app/`) :
 | Téléchargement | `pipeline.py` | yt-dlp dans un processus séparé, arrêté au-delà de 20 min |
 | Transcription | `cloud_transcribe.py` | Groq (gratuit, rapide) ; repli Whisper local, très lent |
 | Niveau sonore | `pipeline.py` → `energy_profile` | rires, cris : note E0–E9 par passage, donnée à l'IA |
+| Action à l'image | `pipeline.py` → `motion_profile` | crashs, poursuites : note V0–V9, donnée à l'IA |
+| Zoom | `pipeline.py` → `_zoom_filter` | zoompan sur le pic son+image, avant les sous-titres |
 | Choix des moments | `highlights.py` | Claude ; consignes de `presets.py` ; repli heuristique sans clé |
 | Spécialisation | `presets.py` | 7 types : critères, durées, cadrage, style de sous-titres |
 | Cadrage 9:16 | `reframe.py` | facecam détectée → écran partagé ; sinon suivi du visage ou fond flou |
@@ -90,8 +92,7 @@ Chaîne de traitement (`app/`) :
 
 ## Pistes non faites
 
-1. **Détection d'action à l'image** (changements brusques de plan) pour compléter le son —
-   l'amélioration la plus prometteuse pour du GTA.
+1. Suivi de la personne qui parle (podcasts à plusieurs) ; facecam indiquée à la main si la
+   détection la rate.
    (Rien de réutilisable trouvé sur GitHub pour les critères par type : `presets.py` est maison.)
-2. Suivi de la personne qui parle (podcasts à plusieurs).
-3. Musique de fond libre de droits, zooms automatiques, publication directe TikTok/YouTube.
+2. Musique de fond libre de droits, zooms automatiques, publication directe TikTok/YouTube.

@@ -114,6 +114,7 @@ class JobRequest(BaseModel):
     rules: str = Field("", max_length=1500)   # règles d'une campagne de clipping
     subtitles: bool = True
     show_hook: bool = False      # accroche incrustée sur la vidéo (sinon : texte à copier)
+    zoom: bool = True            # zoom progressif sur le moment fort
     high_quality: bool = False
     language: str | None = None
 
@@ -168,6 +169,33 @@ def _progress(job_id: str, stage: str):
     return cb
 
 
+def _pic_du_clip(energie: list[float], mouvement: list[float],
+                 start: float, end: float) -> float | None:
+    """Seconde la plus forte du clip (son + image), mesurée depuis son début."""
+    import numpy as np
+
+    i0, i1 = int(start), int(end)
+    duree = end - start
+
+    def normalise(valeurs):
+        part = valeurs[i0:i1] if valeurs else []
+        if len(part) < 3:
+            return None
+        a = np.array(part, dtype=float)
+        etendue = a.max() - a.min()
+        return (a - a.min()) / etendue if etendue > 1e-6 else None
+
+    courbes = [c for c in (normalise(energie), normalise(mouvement)) if c is not None]
+    if not courbes:
+        return None
+    n = min(len(c) for c in courbes)
+    score = sum(c[:n] for c in courbes)
+    pic = float(np.argmax(score)) + 0.5          # milieu de la seconde la plus forte
+    if pic < 1.0 or pic > duree - 1.5:           # il faut la place pour la montée et le retour
+        return None
+    return round(pic, 2)
+
+
 def _chrono(stage: str, t0: float) -> float:
     now = time.time()
     print(f"[durée] {stage} : {now - t0:.0f} s", flush=True)
@@ -205,10 +233,18 @@ def run_job(job_id: str) -> None:
             print(f"[analyse] profil sonore indisponible ({exc})", flush=True)
             energie = []
 
+        _progress(job_id, "analyze")(0.15, "Analyse de l'image (action, crashs, poursuites)…")
+        try:
+            mouvement = pipeline.motion_profile(info["path"])
+        except Exception as exc:
+            print(f"[analyse] profil d'image indisponible ({exc})", flush=True)
+            mouvement = []
+        t0 = _chrono("analyse son et image", t0)
+
         _progress(job_id, "analyze")(0.3, "L'IA cherche les moments les plus viraux…")
         moments, engine, note = find_moments(
             tr["segments"], info["title"], info["duration"],
-            req["num_clips"], req["min_duration"], req["max_duration"], energie,
+            req["num_clips"], req["min_duration"], req["max_duration"], energie, mouvement,
             req.get("content_type", "auto"), req.get("rules", ""),
         )
         t0 = _chrono("analyse IA", t0)
@@ -216,6 +252,7 @@ def run_job(job_id: str) -> None:
             raise RuntimeError("Aucun moment exploitable trouvé (vidéo sans parole ?).")
         _update(job_id, engine=engine, engine_note=note)
 
+        reglages = presets.get(req.get("content_type", "auto"))
         words = [w for s in tr["segments"] for w in s["words"]]
         clips = []
         render = _progress(job_id, "render")
@@ -227,7 +264,9 @@ def run_job(job_id: str) -> None:
                 layout=req["layout"], subtitles=req["subtitles"],
                 hook=m.get("hook") if req.get("show_hook") else None,
                 high_quality=req.get("high_quality", False),
-                sub_style=presets.get(req.get("content_type", "auto"))["sous_titres"],
+                sub_style=reglages["sous_titres"],
+                zoom_at=(_pic_du_clip(energie, mouvement, m["start"], m["end"])
+                         if reglages.get("zoom") and req.get("zoom", True) else None),
             )
             clips.append({**m, "hook_on_video": m.get("hook") if req.get("show_hook") else "",
                           "file": name, "thumb": name.replace(".mp4", ".jpg"),
@@ -631,7 +670,8 @@ def noter_clip(job_id: str, n: int, avis: Avis):
 def voir_presets():
     """Réglages conseillés par type de contenu (utilisés par la page)."""
     return {k: {"nom": v["nom"], "n": v["n"], "min_d": v["min_d"], "max_d": v["max_d"],
-                "layout": v["layout"]} for k, v in presets.PRESETS.items()}
+                "layout": v["layout"], "zoom": v.get("zoom", True)}
+            for k, v in presets.PRESETS.items()}
 
 
 @app.get("/api/lessons")

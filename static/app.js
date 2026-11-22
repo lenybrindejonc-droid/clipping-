@@ -19,6 +19,7 @@ function params() {
     rules: $("rules").value,
     subtitles: $("subs").checked,
     show_hook: $("hook").checked,
+    zoom: $("zoom").checked,
     high_quality: $("hq").checked,
     language: $("lang").value || null,
   };
@@ -404,6 +405,7 @@ $("type").addEventListener("change", () => {
   $("min").value = p.min_d;
   $("max").value = p.max_d;
   $("layout").value = p.layout;
+  $("zoom").checked = p.zoom;
   const info = $("preset-info");
   info.hidden = false;
   info.textContent =

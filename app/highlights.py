@@ -11,8 +11,12 @@ SYSTEM = """Tu es un monteur expert en contenus courts viraux (TikTok, Reels, Yo
 On te donne la transcription horodatée d'une vidéo longue. Ta mission : repérer les passages
 qui feront les meilleurs shorts autonomes.
 
-Chaque ligne est au format [début-fin | E#] texte. E# est le niveau sonore du passage, de E0
-(calme) à E9 (très fort). Un E élevé signale des rires, des cris, une montée de ton, une
+Chaque ligne est au format [début-fin | E# V#] texte.
+E# est le niveau sonore du passage, de E0 (calme) à E9 (très fort).
+V# est l'activité à l'image, de V0 (plan fixe, menu, dialogue statique) à V9 (mouvement
+intense : crash, explosion, course-poursuite, chute). Un V élevé avec un E élevé est le
+signal le plus fiable d'un moment fort. Un V élevé seul peut n'être qu'un déplacement
+rapide sans intérêt ; un E élevé seul peut être une réaction à quelque chose hors écran. Un E élevé signale des rires, des cris, une montée de ton, une
 réaction vive ou un moment d'action : ce sont souvent les meilleurs moments, et le texte seul
 ne les montre pas. Croise toujours les deux : un passage fort ET bien dit vaut mieux qu'un
 passage seulement bruyant. Un E bas n'est pas rédhibitoire si le propos est excellent.
@@ -85,40 +89,60 @@ def _blocks(segments: list[dict], cible: float = 12.0) -> list[dict]:
             b["end"] = s["end"]
             b["text"] += " " + s["text"]
             b["e"].append(s.get("e"))
+            b["v"].append(s.get("v"))
         else:
             blocs.append({"start": s["start"], "end": s["end"], "text": s["text"],
-                          "e": [s.get("e")]})
+                          "e": [s.get("e")], "v": [s.get("v")]})
     for b in blocs:
+        pics_v = [x for x in b["v"] if x is not None]
+        b["v"] = max(pics_v) if pics_v else None
         niveaux = [x for x in b["e"] if x is not None]
         # on garde le PIC du bloc : un éclat de rire ne doit pas être noyé par la moyenne
         b["e"] = max(niveaux) if niveaux else None
     return blocs
 
 
-def annotate_energy(segments: list[dict], energy: list[float], window: float = 1.0) -> None:
-    """Attribue à chaque segment un niveau sonore relatif de 0 à 9."""
-    if not energy or not segments:
+def _niveaux(segments: list[dict], valeurs: list[float], champ: str,
+             agregat: str = "moyenne", defaut: float = 0.0) -> None:
+    """Note chaque segment de 0 à 9 selon sa position par rapport aux autres."""
+    if not valeurs or not segments:
         return
     import numpy as np
 
-    moyennes = []
+    scores = []
     for s in segments:
-        i0 = int(s["start"] / window)
-        i1 = max(int(s["end"] / window) + 1, i0 + 1)
-        part = energy[i0:i1]
-        moyennes.append(float(np.mean(part)) if len(part) else -60.0)
-    arr = np.array(moyennes)
+        i0, i1 = int(s["start"]), max(int(s["end"]) + 1, int(s["start"]) + 1)
+        part = valeurs[i0:i1]
+        if not len(part):
+            scores.append(defaut)
+        else:
+            scores.append(float(np.max(part) if agregat == "pic" else np.mean(part)))
+    arr = np.array(scores)
     rangs = arr.argsort().argsort()                      # position de chaque segment
-    niveaux = (rangs / max(len(arr) - 1, 1) * 9).round().astype(int)
-    for s, n in zip(segments, niveaux):
-        s["e"] = int(n)
+    notes = (rangs / max(len(arr) - 1, 1) * 9).round().astype(int)
+    for s, n in zip(segments, notes):
+        s[champ] = int(n)
+
+
+def annotate_energy(segments: list[dict], energy: list[float], window: float = 1.0) -> None:
+    """Niveau sonore relatif de 0 à 9 (E)."""
+    _niveaux(segments, energy, "e", "moyenne", -60.0)
+
+
+def annotate_motion(segments: list[dict], motion: list[float]) -> None:
+    """Activité à l'image de 0 à 9 (V) : on garde le pic, une explosion est brève."""
+    _niveaux(segments, motion, "v", "pic", 0.0)
 
 
 def _transcript_text(segments: list[dict]) -> str:
     lignes = []
     for s in _blocks(segments):
-        e = f" | E{s['e']}" if s.get("e") is not None else ""
-        lignes.append(f"[{s['start']:.1f}-{s['end']:.1f}{e}] {s['text'].strip()}")
+        marques = ""
+        if s.get("e") is not None:
+            marques += f" | E{s['e']}"
+        if s.get("v") is not None:
+            marques += f" V{s['v']}"
+        lignes.append(f"[{s['start']:.1f}-{s['end']:.1f}{marques}] {s['text'].strip()}")
     return "\n".join(lignes)
 
 
@@ -222,11 +246,12 @@ def _snap(clips, segments, duration, min_d, max_d) -> list[dict]:
 
 
 def find_moments(segments, title, duration, n=8, min_d=20, max_d=60,
-                 energy: list[float] | None = None,
+                 energy: list[float] | None = None, motion: list[float] | None = None,
                  content_type: str = "auto", rules: str = "") -> tuple[list[dict], str, str]:
     if not segments:
         return [], "aucune parole détectée", ""
     annotate_energy(segments, energy or [])
+    annotate_motion(segments, motion or [])
     engine, note = "claude", ""
     try:
         if not (os.getenv("ANTHROPIC_API_KEY") or "").startswith("sk-ant-"):

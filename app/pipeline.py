@@ -170,6 +170,33 @@ def probe_duration(path: Path) -> float:
         raise RuntimeError("fichier vidéo illisible ou incomplet") from None
 
 
+def probe_fps(path: Path) -> float:
+    out = subprocess.run(
+        ["ffprobe", "-v", "error", "-select_streams", "v:0",
+         "-show_entries", "stream=r_frame_rate", "-of", "csv=p=0", str(path)],
+        capture_output=True, text=True,
+    )
+    try:
+        num, den = out.stdout.strip().split("/")
+        fps = float(num) / float(den)
+        return fps if 1 <= fps <= 120 else 30.0
+    except Exception:
+        return 30.0
+
+
+def _zoom_filter(pic: float, fps: float, amplitude: float = 0.14) -> str:
+    """Zoom progressif centré sur le moment fort : montée, maintien, retour au calme."""
+    montee, maintien, retour = 0.35, 1.2, 0.7
+    t = f"(on/{fps:.3f})"
+    d, f_ = pic - montee, pic + maintien            # début de la montée, fin du maintien
+    z = (f"if(lt({t},{d:.2f}),1,"
+         f"if(lt({t},{pic:.2f}),1+{amplitude}*({t}-{d:.2f})/{montee},"
+         f"if(lt({t},{f_:.2f}),{1 + amplitude:.3f},"
+         f"if(lt({t},{f_ + retour:.2f}),{1 + amplitude:.3f}-{amplitude}*({t}-{f_:.2f})/{retour},1))))")
+    return (f"zoompan=z='{z}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'"
+            f":d=1:s={OUT_W}x{OUT_H}:fps={fps:.3f}")
+
+
 def probe_size(path: Path) -> tuple[int, int]:
     out = subprocess.run(
         ["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height",
@@ -293,6 +320,46 @@ def energy_profile(path: Path, window: float = 1.0) -> list[float]:
     return levels
 
 
+def motion_profile(path: Path, fps: int = 3) -> list[float]:
+    """Activité à l'image, seconde par seconde.
+
+    On décode la vidéo en tout petit (128x72, gris) et on mesure à quel point chaque image
+    diffère de la précédente : un crash, une explosion ou une course-poursuite produisent
+    de grosses différences, un menu ou un dialogue statique presque aucune.
+    """
+    import numpy as np
+
+    larg, haut = 128, 72
+    taille = larg * haut
+    proc = subprocess.Popen(
+        ["ffmpeg", "-nostdin", "-loglevel", "error", "-i", str(path),
+         "-an", "-vf", f"fps={fps},scale={larg}:{haut},format=gray", "-f", "rawvideo", "-"],
+        stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+    )
+    valeurs: list[float] = []
+    precedente = None
+    buf = b""
+    try:
+        while True:
+            chunk = proc.stdout.read(taille * 16)
+            if not chunk:
+                break
+            buf += chunk
+            while len(buf) >= taille:
+                img = np.frombuffer(buf[:taille], np.uint8).astype(np.int16)
+                buf = buf[taille:]
+                if precedente is not None:
+                    valeurs.append(float(np.abs(img - precedente).mean()))
+                precedente = img
+    finally:
+        proc.stdout.close()
+        proc.wait()
+
+    # une valeur par seconde : on garde le pic de chaque seconde
+    par_seconde = [max(valeurs[i:i + fps] or [0.0]) for i in range(0, len(valeurs), fps)]
+    return par_seconde
+
+
 def transcribe(path: Path, progress: Progress, language: str | None = None,
                duration: float | None = None) -> dict:
     """Transcription en ligne (Groq) si une clé est configurée, sinon locale."""
@@ -353,6 +420,7 @@ def render_clip(
     hook: str | None = None,
     high_quality: bool = False,
     sub_style: dict | None = None,
+    zoom_at: float | None = None,
 ) -> None:
     """Découpe [start, end], recadre en 9:16 et incruste les sous-titres."""
     duration = end - start
@@ -398,6 +466,10 @@ def render_clip(
             f"[bg][fg]overlay=(W-w)/2:(H-h)/2-80,setsar=1"
         )
     filters.append(base)
+
+    # Zoom AVANT les sous-titres : ils doivent rester fixes et nets
+    if zoom_at is not None and 0.5 < zoom_at < duration - 0.5:
+        filters.append(_zoom_filter(zoom_at, probe_fps(src)))
 
     if (subtitles and words) or hook:
         ass = out.with_suffix(".ass")
