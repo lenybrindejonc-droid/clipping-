@@ -222,6 +222,10 @@ function render(job) {
     else { alert((await res.json()).detail || "Annulation impossible."); cancel.disabled = false; }
   };
 
+  const zip = $("zip-all");
+  zip.hidden = !(job.status === "done" && job.clips.length);
+  zip.href = `/api/jobs/${job.id}/zip`;
+
   const container = $("clips");
   job.clips.forEach((clip, i) => {
     const sig = `${clip.version || 1}|${clip.rendering || ""}|${clip.error || ""}`;

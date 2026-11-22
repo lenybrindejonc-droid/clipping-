@@ -690,6 +690,56 @@ def voir_lessons():
     return {"resume": lessons.resume() or "Pas encore assez de retours."}
 
 
+def _fiche_textes(job: dict) -> str:
+    """Toutes les accroches et légendes dans un fichier texte : elles seraient perdues sinon."""
+    lignes = [f"# {job.get('title') or 'Projet'}", ""]
+    for i, c in enumerate(job["clips"], 1):
+        lignes += [f"## Clip {i} — {c.get('title', '')}",
+                   f"Durée : {c.get('duration')} s · score {c.get('virality_score')}/100"
+                   + (f" · {c.get('kind')}" if c.get("kind") else "")
+                   + (" · ⚠️ SPOILER" if c.get("spoiler") else ""),
+                   f"Fichier : {c.get('file')}", ""]
+        accroches = c.get("hooks") or ([{"texte": c["hook"], "pourquoi": ""}] if c.get("hook") else [])
+        if accroches:
+            lignes.append("Accroches proposées :")
+            lignes += [f"  - {a['texte']}" + (f"   ({a['pourquoi']})" if a.get("pourquoi") else "")
+                       for a in accroches]
+            lignes.append("")
+        legendes = c.get("captions") or {}
+        if legendes:
+            for plateforme, titre in (("tiktok", "TikTok"), ("youtube", "YouTube Shorts"), ("reels", "Reels")):
+                if legendes.get(plateforme):
+                    lignes += [f"Légende {titre} :", legendes[plateforme], ""]
+        elif c.get("description"):
+            lignes += ["Légende :", c["description"], ""]
+        for v in c.get("campaign_check") or []:
+            lignes.append(f"  [{v.get('verdict')}] {v.get('regle')} — {v.get('detail')}")
+        lignes.append("")
+    return "\n".join(lignes)
+
+
+@app.get("/api/jobs/{job_id}/zip")
+def telecharger_tout(job_id: str):
+    """Tous les clips du projet + leurs textes, dans un seul fichier."""
+    import zipfile
+
+    job = jobs.get(job_id)
+    if not job:
+        raise HTTPException(404, "Projet introuvable.")
+    fichiers = [(JOBS / job_id / c["file"]) for c in job["clips"]]
+    fichiers = [f for f in fichiers if f.exists()]
+    if not fichiers:
+        raise HTTPException(404, "Aucun clip disponible : ils ont été effacés par le serveur.")
+
+    nom = re.sub(r"[^\w -]", "", (job.get("title") or "clips"))[:50].strip() or "clips"
+    archive = JOBS / job_id / "tous_les_clips.zip"
+    with zipfile.ZipFile(archive, "w", zipfile.ZIP_STORED) as z:   # vidéos déjà compressées
+        for f in fichiers:
+            z.write(f, f.name)
+        z.writestr("textes.md", _fiche_textes(job))
+    return FileResponse(archive, filename=f"{nom}.zip", media_type="application/zip")
+
+
 @app.get("/media/{job_id}/{name}")
 def media(job_id: str, name: str):
     if not re.fullmatch(r"[0-9a-f]{10}", job_id) or not re.fullmatch(r"clip_\d{2}\.(mp4|jpg)", name):
