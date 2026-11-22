@@ -15,7 +15,7 @@ PRESETS: dict[str, dict] = {
 
     "gaming": {
         "nom": "Gaming (stream, let's play)",
-        "n": 5, "min_d": 20, "max_d": 40, "layout": "auto",
+        "n": 5, "min_d": 20, "max_d": 40, "layout": "gaming",
         "sous_titres": {"mots": 3, "taille": 96, "hauteur": 0.27},
         "consignes": """CONTENU : partie de jeu (let's play, stream).
 
