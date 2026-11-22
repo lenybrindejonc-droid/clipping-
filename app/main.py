@@ -23,7 +23,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Redirect
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, ValidationError
 
-from . import lessons, pipeline
+from . import lessons, pipeline, presets
 from .highlights import find_moments
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -110,7 +110,7 @@ class JobRequest(BaseModel):
     min_duration: int = Field(15, ge=5, le=120)
     max_duration: int = Field(40, ge=10, le=180)
     layout: str = Field("auto", pattern="^(auto|crop|blur|gaming)$")
-    content_type: str = Field("auto", pattern="^(auto|gaming|podcast|vlog)$")
+    content_type: str = Field("auto", pattern="^(auto|gaming|podcast|vlog|tuto|humour|sport)$")
     rules: str = Field("", max_length=1500)   # règles d'une campagne de clipping
     subtitles: bool = True
     show_hook: bool = False      # accroche incrustée sur la vidéo (sinon : texte à copier)
@@ -227,6 +227,7 @@ def run_job(job_id: str) -> None:
                 layout=req["layout"], subtitles=req["subtitles"],
                 hook=m.get("hook") if req.get("show_hook") else None,
                 high_quality=req.get("high_quality", False),
+                sub_style=presets.get(req.get("content_type", "auto"))["sous_titres"],
             )
             clips.append({**m, "hook_on_video": m.get("hook") if req.get("show_hook") else "",
                           "file": name, "thumb": name.replace(".mp4", ".jpg"),
@@ -306,7 +307,7 @@ class ClipEdit(BaseModel):
     hook: str = Field("", max_length=120)
     text: str | None = Field(None, max_length=5000)
     layout: str = Field("auto", pattern="^(auto|crop|blur|gaming)$")
-    content_type: str = Field("auto", pattern="^(auto|gaming|podcast|vlog)$")
+    content_type: str = Field("auto", pattern="^(auto|gaming|podcast|vlog|tuto|humour|sport)$")
     rules: str = Field("", max_length=1500)   # règles d'une campagne de clipping
 
 
@@ -624,6 +625,13 @@ def noter_clip(job_id: str, n: int, avis: Avis):
             "message": "Merci : l'IA en tiendra compte pour les prochaines vidéos."
                        if total >= 3 else
                        f"Noté ({total}/3 avis avant que l'IA commence à s'en servir)."}
+
+
+@app.get("/api/presets")
+def voir_presets():
+    """Réglages conseillés par type de contenu (utilisés par la page)."""
+    return {k: {"nom": v["nom"], "n": v["n"], "min_d": v["min_d"], "max_d": v["max_d"],
+                "layout": v["layout"]} for k, v in presets.PRESETS.items()}
 
 
 @app.get("/api/lessons")

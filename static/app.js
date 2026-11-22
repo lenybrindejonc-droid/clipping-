@@ -393,3 +393,19 @@ async function loadHistory() {
 
 loadHistory();
 if (location.hash.length > 1) openJob(location.hash.slice(1));
+
+// Chaque type de contenu a ses réglages conseillés : on les applique au choix du type.
+let PRESETS = {};
+fetch("/api/presets").then((r) => r.json()).then((p) => { PRESETS = p; }).catch(() => {});
+$("type").addEventListener("change", () => {
+  const p = PRESETS[$("type").value];
+  if (!p) return;
+  $("num").value = p.n;
+  $("min").value = p.min_d;
+  $("max").value = p.max_d;
+  $("layout").value = p.layout;
+  const info = $("preset-info");
+  info.hidden = false;
+  info.textContent =
+    `Réglages conseillés pour « ${p.nom} » : ${p.n} clips de ${p.min_d} à ${p.max_d} s. Tu peux les modifier.`;
+});

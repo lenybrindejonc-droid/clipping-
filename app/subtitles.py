@@ -52,7 +52,13 @@ def write_ass(
     hook: str | None = None,
     sub_pos: tuple[int, int] | None = None,
     hook_pos: tuple[int, int] | None = None,
+    style: dict | None = None,
 ) -> None:
+    style = style or {}
+    mots_max = int(style.get("mots", WORDS_PER_LINE))
+    taille = int(style.get("taille", 96))
+    hauteur = float(style.get("hauteur", 0.27))
+    chars_max = MAX_CHARS + 6 * (mots_max - WORDS_PER_LINE)
     sub_tag = f"{{\\an5\\pos({sub_pos[0]},{sub_pos[1]})}}" if sub_pos else ""
     hook_tag = f"{{\\an5\\pos({hook_pos[0]},{hook_pos[1]})}}" if hook_pos else ""
     words = [x for x in _fix_timing(words) if x["end"] > clip_start and x["start"] < clip_end]
@@ -62,8 +68,8 @@ def write_ass(
     for word in words:
         if (
             not groups
-            or len(groups[-1]) >= WORDS_PER_LINE
-            or sum(len(w["word"]) + 1 for w in groups[-1]) + len(word["word"]) > MAX_CHARS
+            or len(groups[-1]) >= mots_max
+            or sum(len(w["word"]) + 1 for w in groups[-1]) + len(word["word"]) > chars_max
             or word["start"] - groups[-1][-1]["end"] > MAX_GAP
             or groups[-1][-1]["word"].endswith((".", "?", "!"))
         ):
@@ -110,7 +116,7 @@ ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Main,{FONT},96,&H00FFFFFF,&H00FFFFFF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,7,2,2,60,60,{int(h * 0.27)},1
+Style: Main,{FONT},{taille},&H00FFFFFF,&H00FFFFFF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,7,2,2,60,60,{int(h * hauteur)},1
 Style: Hook,{FONT},64,&H00111111,&H00FFFFFF,&H00FFFFFF,&H00FFFFFF,-1,0,0,0,100,100,0,0,3,18,0,8,90,90,{int(h * 0.12)},1
 
 [Events]

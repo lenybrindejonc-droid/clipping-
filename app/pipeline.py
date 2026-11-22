@@ -352,6 +352,7 @@ def render_clip(
     subtitles: bool = True,
     hook: str | None = None,
     high_quality: bool = False,
+    sub_style: dict | None = None,
 ) -> None:
     """Découpe [start, end], recadre en 9:16 et incruste les sous-titres."""
     duration = end - start
@@ -401,7 +402,7 @@ def render_clip(
     if (subtitles and words) or hook:
         ass = out.with_suffix(".ass")
         write_ass(ass, words if subtitles else [], start, end, OUT_W, OUT_H, hook=hook,
-                  sub_pos=sub_pos, hook_pos=hook_pos)
+                  sub_pos=sub_pos, hook_pos=hook_pos, style=sub_style)
         filters.append(f"ass={ass.name}")
 
     vf = ",".join(filters) + "[v]"

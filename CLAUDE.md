@@ -16,7 +16,8 @@ Chaîne de traitement (`app/`) :
 | Téléchargement | `pipeline.py` | yt-dlp dans un processus séparé, arrêté au-delà de 20 min |
 | Transcription | `cloud_transcribe.py` | Groq (gratuit, rapide) ; repli Whisper local, très lent |
 | Niveau sonore | `pipeline.py` → `energy_profile` | rires, cris : note E0–E9 par passage, donnée à l'IA |
-| Choix des moments | `highlights.py` | Claude ; consignes par type de contenu ; repli heuristique sans clé |
+| Choix des moments | `highlights.py` | Claude ; consignes de `presets.py` ; repli heuristique sans clé |
+| Spécialisation | `presets.py` | 7 types : critères, durées, cadrage, style de sous-titres |
 | Cadrage 9:16 | `reframe.py` | facecam détectée → écran partagé ; sinon suivi du visage ou fond flou |
 | Sous-titres | `subtitles.py` | ASS, mot par mot, mot actif en jaune |
 | Interface | `static/` | envoi par morceaux, éditeur de clip, notation |
@@ -91,5 +92,6 @@ Chaîne de traitement (`app/`) :
 
 1. **Détection d'action à l'image** (changements brusques de plan) pour compléter le son —
    l'amélioration la plus prometteuse pour du GTA.
+   (Rien de réutilisable trouvé sur GitHub pour les critères par type : `presets.py` est maison.)
 2. Suivi de la personne qui parle (podcasts à plusieurs).
 3. Musique de fond libre de droits, zooms automatiques, publication directe TikTok/YouTube.
