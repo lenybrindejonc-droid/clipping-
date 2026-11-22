@@ -38,12 +38,27 @@ def identifiants():
     from google.oauth2.credentials import Credentials
     from google_auth_oauthlib.flow import InstalledAppFlow
 
-    creds = Credentials.from_authorized_user_file(str(JETON), SCOPES) if JETON.exists() else None
+    creds = None
+    if JETON.exists():
+        try:
+            creds = Credentials.from_authorized_user_file(str(JETON), SCOPES)
+        except Exception:
+            JETON.unlink(missing_ok=True)
     if creds and creds.valid:
         return creds
+
     if creds and creds.expired and creds.refresh_token:
-        creds.refresh(Request())
-    else:
+        try:
+            creds.refresh(Request())
+            JETON.write_text(creds.to_json())
+            return creds
+        except Exception:
+            # En mode Test, Google invalide l'autorisation tous les 7 jours : on la refait.
+            print("🔄 Autorisation expirée (normal en mode Test) : on la renouvelle.")
+            JETON.unlink(missing_ok=True)
+            creds = None
+
+    if True:
         if not SECRET.exists():
             raise SystemExit(
                 f"❌ Fichier manquant : {SECRET.name}\n"

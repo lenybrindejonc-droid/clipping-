@@ -44,7 +44,9 @@ rien à faire sur un serveur public).
 
 1. Crée un projet sur https://console.cloud.google.com et active **YouTube Data API v3**.
 2. Écran de consentement OAuth : type **Externe**, ajoute ton adresse Gmail en
-   **utilisateur test**, puis **publie l'application** (sinon l'autorisation expire tous les 7 jours).
+   **utilisateur test**. Reste en mode **Test** : passer en production exige un site web et
+   une page de confidentialité. En mode Test, Google invalide l'autorisation tous les 7 jours,
+   et le script la renouvelle tout seul (une page Google s'ouvre, tu cliques, c'est reparti).
 3. Identifiants → **ID client OAuth** → type **Application de bureau** → télécharge le fichier
    et renomme-le `client_secret.json`, à déposer dans le dossier `clipping-`.
 

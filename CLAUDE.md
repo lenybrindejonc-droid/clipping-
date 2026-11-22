@@ -102,5 +102,7 @@ depuis le Space : le jeton YouTube ne doit pas être sur un serveur public).
    détection la rate.
    (Rien de réutilisable trouvé sur GitHub pour les critères par type : `presets.py` est maison.)
 2. Musique de fond libre de droits, publication directe TikTok.
-3. YouTube : quota ~6 envois/jour ; vidéos forcées en privé tant que le projet Google n'a pas
-   passé l'audit YouTube. `client_secret.json` et `token.json` sont dans `.gitignore`.
+3. YouTube : projet Google en mode **Test** (la production exige site web + page de
+   confidentialité) → autorisation renouvelée tous les 7 jours, automatiquement par le script.
+   Quota ~6 envois/jour ; vidéos forcées en privé tant que le projet n'a pas passé l'audit.
+   `client_secret.json` et `token.json` sont dans `.gitignore`.
