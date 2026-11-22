@@ -291,6 +291,10 @@ function buildCard(job, clip, i) {
     setTimeout(() => (e.target.textContent = "Copier la légende"), 1500);
   });
 
+  // Tant que le projet tourne, on ne peut pas refaire un clip : on le dit plutôt que
+  // de laisser cliquer dans le vide.
+  const projetOccupe = job.status !== "done";
+
   // --- Accroches proposées
   const accroches = clip.hooks && clip.hooks.length ? clip.hooks
     : (clip.hook ? [{ texte: clip.hook, pourquoi: "" }] : []);
@@ -319,7 +323,10 @@ function buildCard(job, clip, i) {
       poser.type = "button";
       poser.className = "btn ghost poser";
       poser.textContent = "🎬 Sur la vidéo";
-      poser.title = "Refaire ce clip avec cette accroche incrustée";
+      poser.title = projetOccupe
+        ? "Disponible quand tous les clips seront montés"
+        : "Refaire ce clip avec cette accroche incrustée";
+      poser.disabled = projetOccupe;
       poser.addEventListener("click", async () => {
         poser.disabled = true;
         poser.textContent = "Montage…";
@@ -417,6 +424,8 @@ function buildCard(job, clip, i) {
     q(".t-end").textContent = fmt1(state.end);
     q(".t-dur").textContent = `Durée : ${Math.round(state.end - state.start)} s`;
   };
+  q(".edit-toggle").disabled = projetOccupe;
+  if (projetOccupe) q(".edit-toggle").title = "Disponible quand tous les clips seront montés";
   q(".edit-toggle").addEventListener("click", () => {
     editor.hidden = !editor.hidden;
     q(".edit-toggle").textContent = editor.hidden ? "✏️ Modifier" : "Fermer l'éditeur";

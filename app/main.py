@@ -426,8 +426,13 @@ def edit_clip(job_id: str, n: int, edit: ClipEdit):
     job = jobs.get(job_id)
     if not job:
         raise HTTPException(404, "Projet introuvable.")
+    ETAPES = {"queued": "en attente", "download": "téléchargement", "transcribe": "transcription",
+              "analyze": "analyse", "render": "montage des clips"}
+    if job["status"] in ETAPES:
+        raise HTTPException(409, f"Le projet est encore en cours ({ETAPES[job['status']]}). "
+                                 "Attends que tous les clips soient prêts pour en modifier un.")
     if job["status"] != "done" or not 0 <= n < len(job["clips"]):
-        raise HTTPException(409, "Ce clip ne peut pas être modifié pour l'instant.")
+        raise HTTPException(409, "Ce clip ne peut pas être modifié.")
     clip = job["clips"][n]
     if clip.get("rendering"):
         raise HTTPException(409, "Ce clip est déjà en cours de montage.")
