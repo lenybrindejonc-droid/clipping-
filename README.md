@@ -52,6 +52,16 @@ rien à faire sur un serveur public).
 
 `client_secret.json` et `token.json` sont ignorés par git : ils restent sur ta machine.
 
+### Programmer une série de clips
+
+```bash
+./programmer.sh ~/Téléchargements/mes_clips --par-jour 3
+```
+
+Lit les clips du dossier et le `textes.md` fourni par le bouton « Tout télécharger » du site,
+puis affiche le plan complet (date et heure de chaque publication) avant de demander
+confirmation. Options : `--heures "12:30,18:30,21:00"`, `--a-partir-de 2026-11-25`.
+
 ### Publier un clip
 
 ```bash

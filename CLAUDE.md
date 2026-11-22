@@ -84,6 +84,7 @@ depuis le Space : le jeton YouTube ne doit pas être sur un serveur public).
 ./deploy_hf.sh                    # met à jour le site sur Hugging Face
 ./deploy_vps.sh                   # déploie sur un serveur auto-hébergé
 ./publier.sh "clip.mp4" "Titre"   # publie sur YouTube (aperçu + confirmation obligatoires)
+./programmer.sh dossier           # programme une série de clips, étalée sur plusieurs jours
 ```
 
 ## Clés et réglages (`.env`, jamais dans git)
