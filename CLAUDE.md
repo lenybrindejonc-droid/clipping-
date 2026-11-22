@@ -35,8 +35,9 @@ depuis le Space : le jeton YouTube ne doit pas être sur un serveur public).
   (`APP_PASSWORD`), parce que les Spaces privés ne s'ouvrent pas depuis Safari iOS.
 - Tout est prêt pour un **VPS auto-hébergé** (`deploy_vps.sh`, Docker Compose + Caddy,
   HTTPS gratuit via sslip.io). Moins cher, clips conservés, reste privé. Décision reportée.
-- **Premier vrai résultat (22/11)** : 5 clips produits, 3 jugés très bons (moments et accroches
-  réussis), 2 avec un problème de cadrage — à creuser.
+- **Résultats (22/11)** : 1er lot = 5 clips, 3 très bons, 2 au cadrage raté (facecam non
+  reconnue → cadrage « visage plein écran », corrigé depuis : seuils élargis + choix manuel
+  du coin). 2e lot jugé **« très bien »** par l'utilisateur : la chaîne est validée.
 
 ## Pièges rencontrés (ne pas refaire le diagnostic)
 
@@ -54,7 +55,10 @@ depuis le Space : le jeton YouTube ne doit pas être sur un serveur public).
    venaient de là : il envoyait des `.temp.mp4`.
 6. **Envois coupés** : résolu par l'envoi en morceaux de 8 Mo avec reprise automatique.
 7. **Hugging Face efface les fichiers** à chaque veille ou redémarrage : les clips et le fichier
-   d'avis sont perdus. Toujours dire de télécharger les clips tout de suite.
+   d'avis sont perdus. Toujours dire de télécharger les clips tout de suite. Conséquence :
+   les notes 👍/👎 ne survivent pas à un redéploiement, donc tant qu'on est sur Hugging Face,
+   mieux vaut que l'utilisateur dise ses retours en conversation (on les encode dans
+   `presets.py`). Le VPS réglerait ça.
 8. **Redéployer annule les vidéos en cours** — prévenir avant de proposer `deploy_hf.sh`.
 9. **Emojis incrustés = noir et blanc** (libass ne rend pas les emojis en couleur). Sans
    importance : l'utilisateur écrit ses accroches lui-même sur TikTok, où elles s'affichent
