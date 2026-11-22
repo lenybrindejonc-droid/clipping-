@@ -112,8 +112,43 @@ def _facecam(samples, src_w: int, src_h: int) -> tuple[int, int, int, int] | Non
     return int(x) // 2 * 2, int(y) // 2 * 2, int(w) // 2 * 2, int(h) // 2 * 2
 
 
+COINS = {"hg": (0, 0), "hd": (1, 0), "bg": (0, 1), "bd": (1, 1)}
+
+
+def _facecam_coin(samples, src_w: int, src_h: int, coin: str) -> tuple[int, int, int, int]:
+    """Zone de la facecam quand l'utilisateur indique lui-même son coin.
+
+    On cherche d'abord un visage dans ce quart de l'image ; si on n'en trouve pas,
+    on prend une zone par défaut dans ce coin.
+    """
+    dx, dy = COINS[coin]
+    dans_le_coin = []
+    for _, faces in samples:
+        for fx, fy, fw in faces:
+            bon_x = (fx > src_w / 2) == bool(dx)
+            bon_y = (fy > src_h / 2) == bool(dy)
+            if bon_x and bon_y:
+                dans_le_coin.append((fx, fy, fw))
+
+    if len(dans_le_coin) >= max(3, 0.2 * len(samples)):
+        cx = _median([f[0] for f in dans_le_coin])
+        cy = _median([f[1] for f in dans_le_coin])
+        fw = _median([f[2] for f in dans_le_coin])
+        w = min(fw * 4.0, src_w)
+    else:                                   # aucun visage repéré : zone par défaut
+        w = src_w * 0.30
+        cx = (src_w - w / 2) if dx else w / 2
+        cy = (src_h * 0.72) if dy else (src_h * 0.28)
+
+    h = min(w * FACECAM_H / 1080, src_h)
+    w = h * 1080 / FACECAM_H
+    x = min(max(cx - w / 2, 0), src_w - w)
+    y = min(max(cy - h * 0.45, 0), src_h - h)
+    return int(x) // 2 * 2, int(y) // 2 * 2, int(w) // 2 * 2, int(h) // 2 * 2
+
+
 def analyze(src: Path, start: float, end: float, src_w: int, src_h: int, crop_w: int,
-            allow_facecam: bool = True) -> tuple[str, object]:
+            allow_facecam: bool = True, coin: str = "auto") -> tuple[str, object]:
     """Choisit la mise en page : ("track", expr x(t)), ("facecam", zone) ou ("wide", None)."""
     try:
         samples = _scan(src, start, end)
@@ -122,8 +157,9 @@ def analyze(src: Path, start: float, end: float, src_w: int, src_h: int, crop_w:
         return "wide", None
     if not samples:
         return "wide", None
-    if allow_facecam:
-        box = _facecam(samples, src_w, src_h)
+    if allow_facecam and coin != "aucune":
+        box = _facecam_coin(samples, src_w, src_h, coin) if coin in COINS \
+            else _facecam(samples, src_w, src_h)
         if box:
             return "facecam", box
     expr = _track(samples, src_w, crop_w)

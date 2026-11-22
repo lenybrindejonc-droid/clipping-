@@ -111,6 +111,7 @@ class JobRequest(BaseModel):
     max_duration: int = Field(40, ge=10, le=180)
     layout: str = Field("auto", pattern="^(auto|crop|blur|gaming)$")
     content_type: str = Field("auto", pattern="^(auto|gaming|podcast|vlog|tuto|humour|sport)$")
+    facecam: str = Field("auto", pattern="^(auto|hg|hd|bg|bd|aucune)$")
     rules: str = Field("", max_length=1500)   # règles d'une campagne de clipping
     subtitles: bool = True
     show_hook: bool = False      # accroche incrustée sur la vidéo (sinon : texte à copier)
@@ -272,7 +273,7 @@ def run_job(job_id: str) -> None:
                 layout=req["layout"], subtitles=req["subtitles"],
                 hook=m.get("hook") if req.get("show_hook") else None,
                 high_quality=req.get("high_quality", False),
-                sub_style=reglages["sous_titres"],
+                sub_style=reglages["sous_titres"], facecam=req.get("facecam", "auto"),
                 zoom_at=(_pic_du_clip(energie, mouvement, m["start"], m["end"])
                          if reglages.get("zoom") and req.get("zoom", True) else None),
             )
@@ -355,6 +356,7 @@ class ClipEdit(BaseModel):
     text: str | None = Field(None, max_length=5000)
     layout: str = Field("auto", pattern="^(auto|crop|blur|gaming)$")
     content_type: str = Field("auto", pattern="^(auto|gaming|podcast|vlog|tuto|humour|sport)$")
+    facecam: str = Field("auto", pattern="^(auto|hg|hd|bg|bd|aucune)$")
     rules: str = Field("", max_length=1500)   # règles d'une campagne de clipping
 
 
@@ -395,7 +397,7 @@ def rerender_clip(job_id: str, n: int, edit: dict) -> None:
         pipeline.render_clip(
             src, work / clip["file"], start, end, words, layout=edit["layout"],
             subtitles=req["subtitles"], hook=edit["hook"].strip() or None,
-            high_quality=req.get("high_quality", False),
+            high_quality=req.get("high_quality", False), facecam=req.get("facecam", "auto"),
         )
         _set_clip(job_id, n, start=round(start, 2), end=round(end, 2), duration=round(end - start, 1),
                   hook_on_video=edit["hook"].strip(), layout=edit["layout"],

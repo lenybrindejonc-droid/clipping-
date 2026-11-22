@@ -16,6 +16,7 @@ function params() {
     max_duration: +$("max").value,
     layout: $("layout").value,
     content_type: $("type").value,
+    facecam: $("facecam").value,
     rules: $("rules").value,
     subtitles: $("subs").checked,
     show_hook: $("hook").checked,

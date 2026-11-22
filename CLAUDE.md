@@ -20,7 +20,7 @@ Chaîne de traitement (`app/`) :
 | Zoom | `pipeline.py` → `_zoom_filter` | zoompan sur le pic son+image, avant les sous-titres |
 | Choix des moments | `highlights.py` | Claude ; consignes de `presets.py` ; repli heuristique sans clé |
 | Spécialisation | `presets.py` | 7 types : critères, durées, cadrage, style de sous-titres |
-| Cadrage 9:16 | `reframe.py` | facecam détectée → écran partagé ; sinon suivi du visage ou fond flou |
+| Cadrage 9:16 | `reframe.py` | facecam auto OU coin indiqué par l'utilisateur → écran partagé ; sinon suivi du visage ou fond flou |
 | Sous-titres | `subtitles.py` | ASS, mot par mot, mot actif en jaune |
 | Interface | `static/` | envoi par morceaux, éditeur de clip, notation, 3 accroches, légendes par plateforme |
 
@@ -56,6 +56,9 @@ depuis le Space : le jeton YouTube ne doit pas être sur un serveur public).
 7. **Hugging Face efface les fichiers** à chaque veille ou redémarrage : les clips et le fichier
    d'avis sont perdus. Toujours dire de télécharger les clips tout de suite.
 8. **Redéployer annule les vidéos en cours** — prévenir avant de proposer `deploy_hf.sh`.
+9. **Emojis incrustés = noir et blanc** (libass ne rend pas les emojis en couleur). Sans
+   importance : l'utilisateur écrit ses accroches lui-même sur TikTok, où elles s'affichent
+   en couleur. Les emojis sont donc demandés dans le texte, pas dans l'incrustation.
 
 ## Son matériel et ses habitudes
 
@@ -99,9 +102,9 @@ depuis le Space : le jeton YouTube ne doit pas être sur un serveur public).
 
 ## Pistes non faites
 
-1. Suivi de la personne qui parle (podcasts à plusieurs) ; facecam indiquée à la main si la
-   détection la rate.
-   (Rien de réutilisable trouvé sur GitHub pour les critères par type : `presets.py` est maison.)
+1. Suivi de la personne qui parle (podcasts à plusieurs).
+   (Rien de réutilisable trouvé sur GitHub ni pour les critères par type, ni pour l'écriture
+   des accroches : `presets.py` est maison.)
 2. Musique de fond libre de droits, publication directe TikTok.
 3. YouTube : projet Google en mode **Test** (la production exige site web + page de
    confidentialité) → autorisation renouvelée tous les 7 jours, automatiquement par le script.

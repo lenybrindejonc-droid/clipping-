@@ -1,6 +1,6 @@
 FROM python:3.12-slim-bookworm
 RUN apt-get update \
- && apt-get install -y --no-install-recommends ffmpeg fontconfig fonts-dejavu-core fonts-liberation2 \
+ && apt-get install -y --no-install-recommends ffmpeg fontconfig fonts-dejavu-core fonts-liberation2 fonts-noto-color-emoji \
  && (apt-get install -y --no-install-recommends fonts-inter || echo "police Inter absente : police par défaut") \
  && fc-cache -f \
  && rm -rf /var/lib/apt/lists/*

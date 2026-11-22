@@ -421,6 +421,7 @@ def render_clip(
     high_quality: bool = False,
     sub_style: dict | None = None,
     zoom_at: float | None = None,
+    facecam: str = "auto",
 ) -> None:
     """Découpe [start, end], recadre en 9:16 et incruste les sous-titres."""
     duration = end - start
@@ -431,7 +432,7 @@ def render_clip(
     mode, data = "wide", None
     if layout != "blur" and src_w / src_h > OUT_W / OUT_H:
         mode, data = reframe.analyze(src, start, end, src_w, src_h, crop_w,
-                                     allow_facecam=layout in ("auto", "gaming"))
+                                     allow_facecam=layout in ("auto", "gaming"), coin=facecam)
         if mode == "wide" and layout in ("crop", "gaming"):
             mode, data = "track", str((src_w - crop_w) // 2)  # recadrage centré forcé
 

@@ -32,6 +32,9 @@ Pour chaque clip, propose EXACTEMENT 3 accroches différentes (champ "hooks"), d
 maximum, avec une ligne expliquant pourquoi chacune peut marcher : une question, une
 affirmation, et une qui annonce le résultat sans le dévoiler. Mets la meilleure dans "hook".
 L'accroche doit tenir sa promesse : jamais de propos inventés, jamais de titre mensonger.
+Termine chaque accroche par 1 ou 2 emojis qui collent à l'émotion du moment (😭 pour le
+désespoir, 💀 pour l'échec, 🚨 pour la poursuite, 😳 pour la surprise, 🔥 pour l'exploit).
+Jamais d'emoji au milieu d'une phrase, et jamais plus de deux.
 
 Rédige aussi une légende par plateforme (champ "captions") :
 - tiktok : environ 150 caractères, 3 à 5 hashtags ;
