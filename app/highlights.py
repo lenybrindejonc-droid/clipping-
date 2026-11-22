@@ -28,6 +28,19 @@ Un bon clip :
 - contient un payoff : chute, révélation, punchline, conseil concret, émotion forte, moment drôle ;
 - se termine proprement à la fin d'une phrase, idéalement sur le payoff.
 
+Pour chaque clip, propose EXACTEMENT 3 accroches différentes (champ "hooks"), de 8 mots
+maximum, avec une ligne expliquant pourquoi chacune peut marcher : une question, une
+affirmation, et une qui annonce le résultat sans le dévoiler. Mets la meilleure dans "hook".
+L'accroche doit tenir sa promesse : jamais de propos inventés, jamais de titre mensonger.
+
+Rédige aussi une légende par plateforme (champ "captions") :
+- tiktok : environ 150 caractères, 3 à 5 hashtags ;
+- youtube : un titre de 60 à 100 caractères, puis une description courte, avec #Shorts
+  et 2 ou 3 mots-clés ;
+- reels : une seule ligne, 1 à 5 hashtags.
+Crédite toujours l'auteur de la vidéo d'origine, et ne le présente jamais comme si le clip
+était de lui.
+
 Évite les intros/outros, les sponsors, les passages techniques sans contexte et les clips qui se
 chevauchent. Les timestamps doivent correspondre exactement aux bornes des segments fournis.
 
@@ -55,8 +68,32 @@ SCHEMA = {
                     "start": {"type": "number", "description": "début en secondes"},
                     "end": {"type": "number", "description": "fin en secondes"},
                     "title": {"type": "string", "description": "titre accrocheur, max 60 caractères"},
-                    "hook": {"type": "string", "description": "texte à afficher en haut du short, max 8 mots"},
+                    "hook": {"type": "string", "description": "la meilleure accroche, max 8 mots"},
+                    "hooks": {
+                        "type": "array",
+                        "description": "exactement 3 accroches différentes, de la meilleure à la moins bonne",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "texte": {"type": "string", "description": "8 mots maximum"},
+                                "pourquoi": {"type": "string", "description": "une ligne de justification"},
+                            },
+                            "required": ["texte", "pourquoi"],
+                            "additionalProperties": False,
+                        },
+                    },
                     "description": {"type": "string", "description": "légende prête à poster"},
+                    "captions": {
+                        "type": "object",
+                        "description": "légende adaptée à chaque plateforme",
+                        "properties": {
+                            "tiktok": {"type": "string", "description": "environ 150 caractères, 3 à 5 hashtags"},
+                            "youtube": {"type": "string", "description": "titre de 60 à 100 caractères puis description courte, #Shorts et 2-3 tags"},
+                            "reels": {"type": "string", "description": "une seule ligne, 1 à 5 hashtags"},
+                        },
+                        "required": ["tiktok", "youtube", "reels"],
+                        "additionalProperties": False,
+                    },
                     "hashtags": {"type": "array", "items": {"type": "string"}},
                     "virality_score": {"type": "integer", "description": "0 à 100"},
                     "kind": {"type": "string", "description":
@@ -64,9 +101,24 @@ SCHEMA = {
                     "spoiler": {"type": "boolean",
                                 "description": "vrai si le clip dévoile l'histoire du jeu"},
                     "reason": {"type": "string", "description": "pourquoi ce passage peut marcher"},
+                    "campaign_check": {
+                        "type": "array",
+                        "description": "vide si aucune règle de campagne n'est fournie ; sinon une ligne par règle",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "regle": {"type": "string", "description": "la règle vérifiée"},
+                                "verdict": {"type": "string", "description": "ok, probleme ou incertain"},
+                                "detail": {"type": "string", "description": "une ligne d'explication"},
+                            },
+                            "required": ["regle", "verdict", "detail"],
+                            "additionalProperties": False,
+                        },
+                    },
                 },
-                "required": ["start", "end", "title", "hook", "description", "hashtags",
-                             "virality_score", "kind", "spoiler", "reason"],
+                "required": ["start", "end", "title", "hook", "hooks", "description",
+                             "captions", "hashtags", "virality_score", "kind", "spoiler",
+                             "reason"],
                 "additionalProperties": False,
             },
         }
@@ -159,8 +211,14 @@ def ask_claude(segments, title, n, min_d, max_d, content_type="auto", rules="") 
         systeme += ("\n\nRETOURS DE L'UTILISATEUR sur tes choix précédents — tiens-en compte :\n"
                     + appris)
     if rules.strip():
-        systeme += ("\n\nRÈGLES DE LA CAMPAGNE — elles priment sur tout ce qui précède :\n"
-                    + rules.strip()[:1500])
+        systeme += (
+            "\n\nRÈGLES DE LA CAMPAGNE — elles priment sur tout ce qui précède :\n"
+            + rules.strip()[:1500]
+            + "\n\nPour chaque clip, remplis « campaign_check » : une ligne par règle vérifiable "
+              "(durée, hashtags obligatoires, mention de l'auteur, spoilers, musique tierce, "
+              "plateforme autorisée). Verdict « ok », « probleme » ou « incertain ». "
+              "Mets « incertain » dès que tu ne peux pas vérifier depuis la transcription, "
+              "plutôt que de supposer que tout va bien.")
     prompt = (
         f"Titre de la vidéo : {title}\n"
         f"Trouve les {n} meilleurs moments pour des shorts de {min_d} à {max_d} secondes, "

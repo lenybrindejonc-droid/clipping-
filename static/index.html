@@ -114,12 +114,23 @@
           <span class="time muted"></span>
         </div>
         <h4 class="title"></h4>
-        <p class="hook-line" hidden><span class="muted">Accroche :</span> <b class="hook-text"></b>
-          <button type="button" class="link copy-hook">copier</button></p>
+        <div class="hooks" hidden>
+          <p class="muted small">Accroches proposées — clique pour copier :</p>
+          <div class="hooks-list"></div>
+        </div>
         <p class="reason muted"></p>
         <p class="spoiler warn" hidden>⚠️ Ce clip dévoile l'histoire du jeu.</p>
         <p class="clip-error warn" hidden></p>
-        <textarea class="caption" readonly rows="3"></textarea>
+        <div class="plateformes" hidden>
+          <button type="button" class="chip actif" data-p="tiktok">TikTok</button>
+          <button type="button" class="chip" data-p="youtube">YouTube</button>
+          <button type="button" class="chip" data-p="reels">Reels</button>
+        </div>
+        <textarea class="caption" readonly rows="4"></textarea>
+        <details class="verif" hidden>
+          <summary>Vérification des règles de campagne</summary>
+          <ul class="verif-list"></ul>
+        </details>
         <div class="actions">
           <a class="btn dl" download>Télécharger</a>
           <button class="btn ghost copy" type="button">Copier la légende</button>

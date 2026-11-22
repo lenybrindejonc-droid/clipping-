@@ -105,3 +105,18 @@ label.wide { grid-column: 1 / -1; }
 .avis .btn { padding: 8px 12px; font-size: 14px; }
 .avis-detail { display: flex; flex-direction: column; gap: 8px; border-top: 1px solid var(--line); padding-top: 10px; }
 .avis-merci { margin: 0; }
+.hooks { display: flex; flex-direction: column; gap: 6px; }
+.hooks-list { display: flex; flex-direction: column; gap: 6px; }
+.hook-chip {
+  text-align: left; background: #1b1b25; border: 1px solid var(--line); border-radius: 10px;
+  padding: 8px 10px; display: flex; flex-direction: column; gap: 2px; cursor: pointer; color: var(--text);
+}
+.hook-chip:hover { border-color: var(--accent2); }
+.hook-chip.copie { border-color: var(--accent2); background: #11322f; }
+.plateformes { display: flex; gap: 6px; }
+.chip { background: #1b1b25; border: 1px solid var(--line); color: var(--muted); border-radius: 99px;
+  padding: 5px 12px; font-size: 13px; cursor: pointer; font-weight: 600; }
+.chip.actif { background: var(--accent2); color: #06251f; border-color: var(--accent2); }
+.verif { font-size: 13px; }
+.verif summary { cursor: pointer; }
+.verif-list { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; }

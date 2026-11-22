@@ -22,7 +22,11 @@ Chaîne de traitement (`app/`) :
 | Spécialisation | `presets.py` | 7 types : critères, durées, cadrage, style de sous-titres |
 | Cadrage 9:16 | `reframe.py` | facecam détectée → écran partagé ; sinon suivi du visage ou fond flou |
 | Sous-titres | `subtitles.py` | ASS, mot par mot, mot actif en jaune |
-| Interface | `static/` | envoi par morceaux, éditeur de clip, notation |
+| Interface | `static/` | envoi par morceaux, éditeur de clip, notation, 3 accroches, légendes par plateforme |
+
+Skills du compte utilisés comme référence : `choix-moments-clips-gta` (grille de sélection,
+intégrée dans `presets.py`) et `gta6-clip-production` (3 accroches, légendes TikTok/YouTube/Reels,
+vérification des règles de campagne). `youtube-upload-auto` (publication) n'est pas encore branché.
 
 ## État au 22/11/2026
 

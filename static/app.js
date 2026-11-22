@@ -248,25 +248,69 @@ function buildCard(job, clip, i) {
   q(".reason").textContent = clip.reason;
   if (clip.kind) { q(".kind").hidden = false; q(".kind").textContent = clip.kind; }
   if (clip.spoiler) q(".spoiler").hidden = false;
-  if (clip.hook) {
-    q(".hook-line").hidden = false;
-    q(".hook-text").textContent = clip.hook;
-    q(".copy-hook").addEventListener("click", async (e) => {
-      await navigator.clipboard.writeText(clip.hook);
-      e.target.textContent = "copié ✓";
-      setTimeout(() => (e.target.textContent = "copier"), 1500);
-    });
+  // --- Légendes par plateforme
+  const legendes = clip.captions || {};
+  const hashtags = (clip.hashtags || []).map((h) => (h.startsWith("#") ? h : `#${h}`)).join(" ");
+  const parDefaut = `${clip.description || ""}\n\n${hashtags}`.trim();
+  let plateforme = "tiktok";
+  const majLegende = () => { q(".caption").value = legendes[plateforme] || parDefaut; };
+  if (legendes.tiktok) {
+    q(".plateformes").hidden = false;
+    q(".plateformes").querySelectorAll(".chip").forEach((c) =>
+      c.addEventListener("click", () => {
+        plateforme = c.dataset.p;
+        q(".plateformes").querySelectorAll(".chip").forEach((x) => x.classList.toggle("actif", x === c));
+        majLegende();
+      }));
   }
-  const caption = `${clip.description}\n\n${(clip.hashtags || []).map((h) => (h.startsWith("#") ? h : `#${h}`)).join(" ")}`;
-  q(".caption").value = caption;
+  majLegende();
+
   const dl = q(".dl");
   dl.href = src;
   dl.download = `${(clip.title || "clip").replace(/[^\p{L}\p{N} _-]/gu, "").slice(0, 50)}.mp4`;
   q(".copy").addEventListener("click", async (e) => {
-    await navigator.clipboard.writeText(caption);
+    await navigator.clipboard.writeText(q(".caption").value);
     e.target.textContent = "Copié ✓";
     setTimeout(() => (e.target.textContent = "Copier la légende"), 1500);
   });
+
+  // --- Accroches proposées
+  const accroches = clip.hooks && clip.hooks.length ? clip.hooks
+    : (clip.hook ? [{ texte: clip.hook, pourquoi: "" }] : []);
+  if (accroches.length) {
+    q(".hooks").hidden = false;
+    accroches.forEach((h) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "hook-chip";
+      b.innerHTML = `<b></b><span class="muted small"></span>`;
+      b.querySelector("b").textContent = h.texte;
+      b.querySelector("span").textContent = h.pourquoi || "";
+      b.addEventListener("click", async () => {
+        await navigator.clipboard.writeText(h.texte);
+        const champ = q(".e-hook");
+        if (champ) champ.value = h.texte;      // prête à être incrustée si tu le veux
+        b.classList.add("copie");
+        setTimeout(() => b.classList.remove("copie"), 1500);
+      });
+      q(".hooks-list").appendChild(b);
+    });
+  }
+
+  // --- Vérification des règles de campagne
+  const verif = clip.campaign_check || [];
+  if (verif.length) {
+    q(".verif").hidden = false;
+    const icones = { ok: "✅", probleme: "⛔", incertain: "❓" };
+    verif.forEach((v) => {
+      const li = document.createElement("li");
+      li.textContent = `${icones[v.verdict] || "❓"} ${v.regle} — ${v.detail}`;
+      q(".verif-list").appendChild(li);
+    });
+    const souci = verif.some((v) => v.verdict !== "ok");
+    q(".verif").querySelector("summary").textContent =
+      souci ? "⚠️ Règles de campagne : à vérifier" : "✅ Règles de campagne : tout est bon";
+  }
 
   if (clip.error) {
     q(".clip-error").hidden = false;
