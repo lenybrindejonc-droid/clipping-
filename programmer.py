@@ -37,6 +37,16 @@ def reglages_env() -> dict[str, str]:
     return env
 
 
+def _adresse_propre(adresse: str) -> str:
+    """Accepte « leno10-clipping.hf.space » aussi bien que l'adresse complète."""
+    adresse = adresse.strip().rstrip("/")
+    if not adresse:
+        raise SystemExit("❌ Aucune adresse de site. Relance ./deploy_hf.sh ou utilise --site.")
+    if not adresse.startswith(("http://", "https://")):
+        adresse = "https://" + adresse
+    return adresse
+
+
 def recuperer_du_site(adresse: str, mot_de_passe: str, destination: Path,
                       bibliotheque: bool = False) -> Path:
     """Télécharge les clips du dernier projet terminé, directement depuis le site."""
@@ -45,7 +55,7 @@ def recuperer_du_site(adresse: str, mot_de_passe: str, destination: Path,
 
     import httpx
 
-    adresse = adresse.rstrip("/")
+    adresse = _adresse_propre(adresse)
     with httpx.Client(base_url=adresse, timeout=600, follow_redirects=True) as client:
         if mot_de_passe:
             client.post("/login", data={"password": mot_de_passe})
