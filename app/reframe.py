@@ -98,9 +98,11 @@ def _facecam(samples, src_w: int, src_h: int) -> tuple[int, int, int, int] | Non
         return None
     fw = _median([f[2] for f in main])
     cx, cy = _median([f[0] for f in main]), _median([f[1] for f in main])
-    steady = sum(abs(f[0] - cx) < 0.04 * src_w and abs(f[1] - cy) < 0.04 * src_h for f in main)
-    if fw > 0.13 * src_w or steady < 0.7 * len(main):
-        return None  # visage trop grand ou qui bouge : ce n'est pas une facecam
+    # Tolérances larges : mieux vaut reconnaître une facecam un peu grande ou qui bouge
+    # que de basculer sur un cadrage « visage plein écran » qui perd le jeu.
+    steady = sum(abs(f[0] - cx) < 0.07 * src_w and abs(f[1] - cy) < 0.07 * src_h for f in main)
+    if fw > 0.22 * src_w or steady < 0.55 * len(main):
+        return None  # visage occupant tout l'écran : ce n'est pas une facecam
     # Cadre autour du visage, au format du bandeau du haut (1080x700)
     w = min(fw * 4.0, src_w)  # pas trop serré : moins de zoom = image plus nette
     h = min(w * FACECAM_H / 1080, src_h)
