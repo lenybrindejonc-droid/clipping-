@@ -47,23 +47,27 @@ $("file").addEventListener("change", () => {
   if (f) $("file-name").textContent = `${f.name} — ${(f.size / 1048576).toFixed(0)} Mo`;
 });
 
-const CHUNK = 8 * 1024 * 1024;           // 8 Mo par morceau
+const CHUNK_MAX = 8 * 1024 * 1024;       // 8 Mo par morceau quand tout va bien
+const CHUNK_MIN = 2 * 1024 * 1024;       // réduit à 2 Mo si la connexion flanche
+const ESSAIS = 6;                        // essais par morceau avant de souffler
+const REPRISES = 3;                      // reprises automatiques avant d'abandonner
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let envoi = null;                        // { id, file } de l'envoi en cours
 
-function majEnvoi(recu, total) {
+function majEnvoi(recu, total, suffixe = "") {
   const pct = (recu / total) * 100;
   $("up-fill").style.width = `${pct}%`;
   $("file-name").textContent =
-    `Envoi… ${pct.toFixed(0)} % (${(recu / 1048576).toFixed(0)} / ${(total / 1048576).toFixed(0)} Mo)`;
+    `Envoi… ${pct.toFixed(0)} % (${(recu / 1048576).toFixed(0)} / ${(total / 1048576).toFixed(0)} Mo)${suffixe}`;
 }
 
 async function envoyerMorceaux(id, file, depuis) {
   let offset = depuis;
+  let taille = CHUNK_MAX;
   while (offset < file.size) {
-    const bout = file.slice(offset, offset + CHUNK);
+    const bout = file.slice(offset, offset + taille);
     let envoye = false;
-    for (let essai = 1; essai <= 4 && !envoye; essai++) {
+    for (let essai = 1; essai <= ESSAIS && !envoye; essai++) {
       try {
         const r = await fetch(`/api/uploads/${id}?offset=${offset}`, { method: "PUT", body: bout });
         const d = await r.json().catch(() => ({}));
@@ -76,7 +80,11 @@ async function envoyerMorceaux(id, file, depuis) {
       } catch (err) {
         if (err.message && !err.message.includes("Failed to fetch")) throw err;
       }
-      if (!envoye) await sleep(1500 * essai);  // coupure réseau : on patiente puis on réessaie
+      if (!envoye) {
+        taille = CHUNK_MIN;                    // connexion fragile : on envoie plus petit
+        majEnvoi(offset, file.size, ` — reprise (essai ${essai}/${ESSAIS})`);
+        await sleep(Math.min(3000 * essai, 20000));
+      }
     }
     if (!envoye) throw new Error("coupure");
     majEnvoi(offset, file.size);
@@ -99,8 +107,17 @@ async function demarrerEnvoi(file, reprise = false) {
       if (!r.ok) throw new Error(typeof d.detail === "string" ? d.detail : "Envoi impossible.");
       envoi = { id: d.upload_id, file };
     }
-    const etat = await (await fetch(`/api/uploads/${envoi.id}`)).json();
-    await envoyerMorceaux(envoi.id, file, etat.received || 0);
+    for (let tentative = 1; ; tentative++) {
+      const etat = await (await fetch(`/api/uploads/${envoi.id}`)).json();
+      try {
+        await envoyerMorceaux(envoi.id, file, etat.received || 0);
+        break;
+      } catch (err) {
+        if (err.message !== "coupure" || tentative >= REPRISES) throw err;
+        majEnvoi(etat.received || 0, file.size, " — connexion perdue, nouvelle tentative…");
+        await sleep(10000);                   // on laisse la connexion revenir
+      }
+    }
 
     $("file-name").textContent = "Envoi terminé ✓ — vérification…";
     const fin = await fetch(`/api/uploads/${envoi.id}/finish`, { method: "POST" });
