@@ -94,6 +94,18 @@
   </header>
 
   <main>
+    <nav class="onglets">
+      <button class="onglet actif" data-vue="projets">Projets</button>
+      <button class="onglet" data-vue="biblio">📚 Bibliothèque <span id="biblio-compte"></span></button>
+    </nav>
+
+    <section id="vue-biblio" hidden>
+      <p class="muted small" id="biblio-info"></p>
+      <a id="biblio-zip" class="btn" download>⬇️ Télécharger les clips à publier</a>
+      <div id="biblio-liste" class="clips"></div>
+    </section>
+
+    <section id="vue-projets">
     <section id="current" hidden>
       <div class="card status">
         <div class="status-head">
@@ -112,6 +124,7 @@
     <section id="history-wrap" hidden>
       <h3>Projets précédents</h3>
       <ul id="history" class="history"></ul>
+    </section>
     </section>
   </main>
 

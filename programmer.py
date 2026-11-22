@@ -37,7 +37,8 @@ def reglages_env() -> dict[str, str]:
     return env
 
 
-def recuperer_du_site(adresse: str, mot_de_passe: str, destination: Path) -> Path:
+def recuperer_du_site(adresse: str, mot_de_passe: str, destination: Path,
+                      bibliotheque: bool = False) -> Path:
     """Télécharge les clips du dernier projet terminé, directement depuis le site."""
     import io
     import zipfile
@@ -48,6 +49,16 @@ def recuperer_du_site(adresse: str, mot_de_passe: str, destination: Path) -> Pat
     with httpx.Client(base_url=adresse, timeout=600, follow_redirects=True) as client:
         if mot_de_passe:
             client.post("/login", data={"password": mot_de_passe})
+        if bibliotheque:
+            archive = client.get("/api/library/zip")
+            if archive.status_code == 401:
+                raise SystemExit("❌ Mot de passe du site refusé.")
+            if archive.status_code == 404:
+                raise SystemExit("❌ Aucun clip à publier dans la bibliothèque.")
+            archive.raise_for_status()
+            print("\n⬇️  Récupération de la bibliothèque…")
+            return _extraire(archive.content, destination)
+
         reponse = client.get("/api/jobs")
         if reponse.status_code == 401:
             raise SystemExit("❌ Mot de passe du site refusé.")
@@ -70,8 +81,15 @@ def recuperer_du_site(adresse: str, mot_de_passe: str, destination: Path) -> Pat
         archive = client.get(f"/api/jobs/{projet['id']}/zip")
         archive.raise_for_status()
 
+    return _extraire(archive.content, destination)
+
+
+def _extraire(contenu: bytes, destination: Path) -> Path:
+    import io
+    import zipfile
+
     destination.mkdir(parents=True, exist_ok=True)
-    with zipfile.ZipFile(io.BytesIO(archive.content)) as z:
+    with zipfile.ZipFile(io.BytesIO(contenu)) as z:
         z.extractall(destination)
     print(f"   {len(list(destination.glob('*.mp4')))} clips enregistrés dans {destination}")
     return destination
@@ -121,6 +139,8 @@ def main() -> None:
     p.add_argument("dossier", nargs="?", default="",
                    help="dossier contenant les clips ; vide = récupérer depuis le site")
     p.add_argument("--site", default="", help="adresse du site (sinon SITE_URL du fichier .env)")
+    p.add_argument("--bibliotheque", action="store_true",
+                   help="prendre les clips de la bibliothèque plutôt qu'un projet")
     p.add_argument("--par-jour", type=int, default=3, help="clips publiés par jour (défaut : 3)")
     p.add_argument("--heures", default="12:30,18:30,21:00",
                    help="heures de publication, séparées par des virgules (heure de Paris)")
@@ -138,7 +158,8 @@ def main() -> None:
         mot_de_passe = env.get("APP_PASSWORD", "")
         if not mot_de_passe:
             mot_de_passe = input("Mot de passe du site (Entrée si aucun) : ").strip()
-        dossier = recuperer_du_site(adresse, mot_de_passe, RACINE.parent / "clips_du_site")
+        dossier = recuperer_du_site(adresse, mot_de_passe, RACINE.parent / "clips_du_site",
+                                    bibliotheque=args.bibliotheque)
     clips = sorted(f for f in dossier.glob("*.mp4") if not f.name.startswith("source"))
     if not clips:
         raise SystemExit(f"❌ Aucun clip (.mp4) dans {dossier}")

@@ -23,6 +23,7 @@ Chaîne de traitement (`app/`) :
 | Cadrage 9:16 | `reframe.py` | facecam auto OU coin indiqué par l'utilisateur → écran partagé ; sinon suivi du visage ou fond flou |
 | Sous-titres | `subtitles.py` | ASS, mot par mot, mot actif en jaune |
 | Interface | `static/` | envoi par morceaux, éditeur de clip, notation, 3 accroches, légendes par plateforme |
+| Bibliothèque | `main.py` → `garder_automatiquement` | tout clip monté est gardé 30 jours (lien matériel : aucun espace en plus) |
 
 Skills du compte utilisés comme référence : `choix-moments-clips-gta` (grille de sélection,
 intégrée dans `presets.py`) et `gta6-clip-production` (3 accroches, légendes TikTok/YouTube/Reels,
@@ -88,6 +89,7 @@ depuis le Space : le jeton YouTube ne doit pas être sur un serveur public).
 ./deploy_vps.sh                   # déploie sur un serveur auto-hébergé
 ./publier.sh "clip.mp4" "Titre"   # publie sur YouTube (aperçu + confirmation obligatoires)
 ./programmer.sh                   # récupère les clips SUR LE SITE puis programme la série
+./programmer.sh --bibliotheque    # idem, depuis la bibliothèque
                                   # (SITE_URL + APP_PASSWORD écrits dans .env par deploy_hf.sh)
 ```
 

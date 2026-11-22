@@ -502,3 +502,68 @@ $("type").addEventListener("change", () => {
   info.textContent =
     `Réglages conseillés pour « ${p.nom} » : ${p.n} clips de ${p.min_d} à ${p.max_d} s. Tu peux les modifier.`;
 });
+
+
+// ---------------------------------------------------------------- bibliothèque
+document.querySelectorAll(".onglet").forEach((o) =>
+  o.addEventListener("click", () => {
+    document.querySelectorAll(".onglet").forEach((x) => x.classList.toggle("actif", x === o));
+    const biblio = o.dataset.vue === "biblio";
+    $("vue-biblio").hidden = !biblio;
+    $("vue-projets").hidden = biblio;
+    if (biblio) chargerBiblio();
+  }),
+);
+
+async function chargerBiblio() {
+  const r = await fetch("/api/library");
+  if (!r.ok) return;
+  const { clips, garde_jours } = await r.json();
+  const aPublier = clips.filter((c) => !c.publie_le).length;
+  $("biblio-compte").textContent = aPublier ? `(${aPublier})` : "";
+  $("biblio-zip").hidden = !aPublier;
+  $("biblio-zip").href = "/api/library/zip";
+  $("biblio-info").textContent = clips.length
+    ? `${clips.length} clip(s) gardés automatiquement. Ils sont supprimés au bout de ${garde_jours} jours.`
+    : `Vide pour l'instant. Tes clips y seront rangés automatiquement et gardés ${garde_jours} jours.`;
+
+  const liste = $("biblio-liste");
+  liste.innerHTML = "";
+  clips.forEach((c) => {
+    const carte = document.createElement("article");
+    carte.className = "clip";
+    const jours = Math.max(0, Math.round(garde_jours - (Date.now() / 1000 - c.ajoute_le) / 86400));
+    const etat = c.publie_le ? `✅ publié · encore ${jours} j` : `gardé encore ${jours} j`;
+    const legende = (c.captions && c.captions.tiktok) || c.description || "";
+    carte.innerHTML = `
+      <div class="video-wrap"><video controls preload="none" playsinline></video></div>
+      <div class="clip-body">
+        <div class="clip-top"><span class="score"></span><span class="time muted"></span></div>
+        <h4 class="title"></h4>
+        <p class="muted small projet"></p>
+        <textarea class="caption" readonly rows="3"></textarea>
+        <div class="actions">
+          <a class="btn dl" download>Télécharger</a>
+          <button class="btn ghost suppr" type="button">Supprimer</button>
+        </div>
+      </div>`;
+    carte.querySelector("video").src = `/media/library/${c.id}/clip.mp4`;
+    carte.querySelector("video").poster = `/media/library/${c.id}/thumb.jpg`;
+    carte.querySelector(".score").textContent = etat;
+    carte.querySelector(".time").textContent = c.duration ? `${Math.round(c.duration)}s` : "";
+    carte.querySelector(".title").textContent = c.title || "Clip";
+    carte.querySelector(".projet").textContent = `Projet : ${c.projet || "?"}`;
+    carte.querySelector(".caption").value = legende;
+    const dl = carte.querySelector(".dl");
+    dl.href = `/media/library/${c.id}/clip.mp4`;
+    dl.download = `${(c.title || "clip").replace(/[^\p{L}\p{N} _-]/gu, "").slice(0, 50)}.mp4`;
+    carte.querySelector(".suppr").addEventListener("click", async () => {
+      if (!confirm("Supprimer définitivement ce clip de la bibliothèque ?")) return;
+      await fetch(`/api/library/${c.id}`, { method: "DELETE" });
+      chargerBiblio();
+    });
+    liste.appendChild(carte);
+  });
+}
+
+chargerBiblio();

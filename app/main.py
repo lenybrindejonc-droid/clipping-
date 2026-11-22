@@ -285,6 +285,10 @@ def run_job(job_id: str) -> None:
                           "duration": round(m["end"] - m["start"], 1), "layout": req["layout"],
                           "text": _clip_text(words, m["start"], m["end"]), "version": 1})
             _update(job_id, clips=clips)
+            try:
+                garder_automatiquement(job, clips[-1])
+            except Exception as exc:
+                print(f"[bibliothèque] clip non gardé ({exc})", flush=True)
             t0 = _chrono(f"montage clip {i}", t0)
 
         _update(job_id, status="done", progress=100, message=f"{len(clips)} shorts prêts !")
@@ -695,6 +699,160 @@ def voir_presets():
 @app.get("/api/lessons")
 def voir_lessons():
     return {"resume": lessons.resume() or "Pas encore assez de retours."}
+
+
+# ---------------------------------------------------------------- bibliothèque
+
+BIBLIO = DATA / "bibliotheque"
+BIBLIO.mkdir(parents=True, exist_ok=True)
+GARDE_JOURS = int(os.getenv("GARDE_JOURS", "30"))
+
+
+def _biblio_lire() -> list[dict]:
+    entrees = []
+    for meta in BIBLIO.glob("*/meta.json"):
+        try:
+            entrees.append(json.loads(meta.read_text()))
+        except Exception:
+            pass
+    return sorted(entrees, key=lambda e: -e.get("ajoute_le", 0))
+
+
+def _biblio_menage() -> None:
+    """Supprime les clips gardés depuis plus de GARDE_JOURS jours."""
+    limite = time.time() - GARDE_JOURS * 86400
+    for entree in _biblio_lire():
+        if entree.get("ajoute_le", 0) < limite:
+            shutil.rmtree(BIBLIO / entree["id"], ignore_errors=True)
+
+
+_biblio_menage()
+
+
+class MarquePubliee(BaseModel):
+    youtube_id: str = Field("", max_length=40)
+
+
+def garder_automatiquement(job: dict, clip: dict) -> dict | None:
+    """Range une copie du clip dans la bibliothèque, dès qu'il est monté.
+
+    Aucune action de l'utilisateur : c'est un filet de sécurité. On utilise un lien
+    matériel quand c'est possible, pour ne pas occuper le disque deux fois.
+    """
+    source = JOBS / job["id"] / clip["file"]
+    if not source.exists():
+        return None
+    cle = uuid.uuid4().hex[:12]
+    dossier = BIBLIO / cle
+    dossier.mkdir(parents=True, exist_ok=True)
+    try:
+        os.link(source, dossier / "clip.mp4")
+    except OSError:
+        shutil.copy2(source, dossier / "clip.mp4")
+    vignette = JOBS / job["id"] / clip.get("thumb", "")
+    if vignette.exists():
+        try:
+            os.link(vignette, dossier / "thumb.jpg")
+        except OSError:
+            shutil.copy2(vignette, dossier / "thumb.jpg")
+
+    entree = {k: clip.get(k) for k in ("title", "hook", "hooks", "description", "captions",
+                                       "hashtags", "kind", "spoiler", "duration",
+                                       "virality_score", "campaign_check")}
+    entree |= {"id": cle, "projet": job.get("title") or job["id"], "ajoute_le": time.time(),
+               "publie_le": None, "youtube_id": ""}
+    (dossier / "meta.json").write_text(json.dumps(entree, ensure_ascii=False, indent=1))
+    return entree
+
+
+@app.post("/api/jobs/{job_id}/clips/{n}/garder")
+def garder_clip(job_id: str, n: int):
+    """Garde un clip à la demande (normalement déjà fait automatiquement)."""
+    job = jobs.get(job_id)
+    if not job or not 0 <= n < len(job["clips"]):
+        raise HTTPException(404, "Clip introuvable.")
+    clip = job["clips"][n]
+    source = JOBS / job_id / clip["file"]
+    if not source.exists():
+        raise HTTPException(404, "Ce clip n'est plus sur le serveur.")
+
+    cle = uuid.uuid4().hex[:12]
+    dossier = BIBLIO / cle
+    dossier.mkdir(parents=True)
+    shutil.copy2(source, dossier / "clip.mp4")
+    vignette = JOBS / job_id / clip.get("thumb", "")
+    if vignette.exists():
+        shutil.copy2(vignette, dossier / "thumb.jpg")
+
+    entree = {k: clip.get(k) for k in ("title", "hook", "hooks", "description", "captions",
+                                       "hashtags", "kind", "spoiler", "duration",
+                                       "virality_score", "campaign_check")}
+    entree |= {"id": cle, "projet": job.get("title") or job_id, "ajoute_le": time.time(),
+               "publie_le": None, "youtube_id": ""}
+    (dossier / "meta.json").write_text(json.dumps(entree, ensure_ascii=False, indent=1))
+    _set_clip(job_id, n, garde=True)
+    return entree
+
+
+@app.get("/api/library")
+def voir_bibliotheque():
+    _biblio_menage()
+    entrees = _biblio_lire()
+    for e in entrees:
+        if e.get("publie_le"):
+            restant = GARDE_JOURS - (time.time() - e["publie_le"]) / 86400
+            e["jours_restants"] = max(0, round(restant))
+    return {"clips": entrees, "garde_jours": GARDE_JOURS}
+
+
+@app.delete("/api/library/{cle}")
+def supprimer_de_bibliotheque(cle: str):
+    if not re.fullmatch(r"[0-9a-f]{12}", cle) or not (BIBLIO / cle).is_dir():
+        raise HTTPException(404, "Clip introuvable dans la bibliothèque.")
+    shutil.rmtree(BIBLIO / cle, ignore_errors=True)
+    return {"ok": True}
+
+
+@app.post("/api/library/{cle}/publie")
+def marquer_publie(cle: str, marque: MarquePubliee):
+    """Appelé par programmer.sh après un envoi réussi."""
+    meta = BIBLIO / cle / "meta.json"
+    if not re.fullmatch(r"[0-9a-f]{12}", cle) or not meta.exists():
+        raise HTTPException(404, "Clip introuvable dans la bibliothèque.")
+    entree = json.loads(meta.read_text())
+    entree["publie_le"] = time.time()
+    entree["youtube_id"] = marque.youtube_id
+    meta.write_text(json.dumps(entree, ensure_ascii=False, indent=1))
+    return entree
+
+
+@app.get("/media/library/{cle}/{nom}")
+def media_bibliotheque(cle: str, nom: str):
+    if not re.fullmatch(r"[0-9a-f]{12}", cle) or nom not in ("clip.mp4", "thumb.jpg"):
+        raise HTTPException(404)
+    chemin = BIBLIO / cle / nom
+    if not chemin.exists():
+        raise HTTPException(404)
+    return FileResponse(chemin)
+
+
+@app.get("/api/library/zip")
+def bibliotheque_zip(a_publier: bool = True):
+    """Archive des clips de la bibliothèque, avec leurs textes."""
+    import zipfile
+
+    entrees = [e for e in _biblio_lire() if not (a_publier and e.get("publie_le"))]
+    if not entrees:
+        raise HTTPException(404, "Aucun clip à publier dans la bibliothèque.")
+    archive = BIBLIO / "bibliotheque.zip"
+    faux_projet = {"title": "Bibliothèque", "clips": []}
+    with zipfile.ZipFile(archive, "w", zipfile.ZIP_STORED) as z:
+        for e in entrees:
+            nom = f"{e['id']}.mp4"
+            z.write(BIBLIO / e["id"] / "clip.mp4", nom)
+            faux_projet["clips"].append({**e, "file": nom})
+        z.writestr("textes.md", _fiche_textes(faux_projet))
+    return FileResponse(archive, filename="bibliotheque.zip", media_type="application/zip")
 
 
 def _fiche_textes(job: dict) -> str:

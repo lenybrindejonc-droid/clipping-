@@ -83,6 +83,17 @@ Le script affiche d'abord un aperçu et demande confirmation. Options utiles :
 ton projet Google n'a pas passé l'audit YouTube, les vidéos envoyées par l'API **restent
 privées** — à rendre publiques à la main dans YouTube Studio.
 
+## Bibliothèque
+
+Chaque clip monté est automatiquement rangé dans une bibliothèque (onglet 📚 de la page) et
+conservé **30 jours**, même si le projet est supprimé. Aucun clic nécessaire. Un lien matériel
+est utilisé, donc aucun espace disque supplémentaire n'est occupé. Durée réglable avec
+`GARDE_JOURS` dans `.env`.
+
+⚠️ Sur Hugging Face, les fichiers sont effacés à chaque mise en veille : la bibliothèque n'y
+survit pas. Elle ne tient ses 30 jours qu'avec un stockage persistant (option payante de
+Hugging Face) ou sur un serveur auto-hébergé.
+
 ## Apprentissage des retours
 
 Chaque clip peut être noté sur la page (👍 / 👎 avec la raison). Les avis sont enregistrés
