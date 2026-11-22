@@ -55,10 +55,13 @@ rien à faire sur un serveur public).
 ### Programmer une série de clips
 
 ```bash
-./programmer.sh ~/Téléchargements/mes_clips --par-jour 3
+./programmer.sh --par-jour 3                    # va chercher les clips sur le site
+./programmer.sh ~/Téléchargements/mes_clips     # ou depuis un dossier local
 ```
 
-Lit les clips du dossier et le `textes.md` fourni par le bouton « Tout télécharger » du site,
+Sans dossier, le script se connecte au site (adresse et mot de passe lus dans `.env`,
+renseignés automatiquement par `deploy_hf.sh`), propose les projets terminés et télécharge
+celui que tu choisis. Il lit les clips et le `textes.md` fourni par le site,
 puis affiche le plan complet (date et heure de chaque publication) avant de demander
 confirmation. Options : `--heures "12:30,18:30,21:00"`, `--a-partir-de 2026-11-25`.
 

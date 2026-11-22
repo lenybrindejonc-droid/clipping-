@@ -26,6 +26,57 @@ def date_fr(d: datetime) -> str:
     return f"{JOURS[d.weekday()]} {d:%d/%m à %H:%M}"
 
 
+def reglages_env() -> dict[str, str]:
+    env = {}
+    fichier = RACINE / ".env"
+    if fichier.exists():
+        for ligne in fichier.read_text().splitlines():
+            if "=" in ligne and not ligne.lstrip().startswith("#"):
+                cle, valeur = ligne.split("=", 1)
+                env[cle.strip()] = valeur.strip().strip('"').strip("'")
+    return env
+
+
+def recuperer_du_site(adresse: str, mot_de_passe: str, destination: Path) -> Path:
+    """Télécharge les clips du dernier projet terminé, directement depuis le site."""
+    import io
+    import zipfile
+
+    import httpx
+
+    adresse = adresse.rstrip("/")
+    with httpx.Client(base_url=adresse, timeout=600, follow_redirects=True) as client:
+        if mot_de_passe:
+            client.post("/login", data={"password": mot_de_passe})
+        reponse = client.get("/api/jobs")
+        if reponse.status_code == 401:
+            raise SystemExit("❌ Mot de passe du site refusé.")
+        reponse.raise_for_status()
+        projets = [p for p in reponse.json() if p.get("status") == "done" and p.get("clips")]
+        if not projets:
+            raise SystemExit("❌ Aucun projet terminé sur le site.")
+
+        if len(projets) > 1:
+            print("\nProjets disponibles :")
+            for i, p in enumerate(projets, 1):
+                print(f"  {i}. {p.get('title') or p['id']}  ({len(p['clips'])} clips)")
+            choix = input(f"Lequel ? (1-{len(projets)}, Entrée = 1) : ").strip() or "1"
+            projet = projets[int(choix) - 1] if choix.isdigit() and 1 <= int(choix) <= len(projets) else projets[0]
+        else:
+            projet = projets[0]
+
+        print(f"\n⬇️  Récupération de « {projet.get('title') or projet['id']} » "
+              f"({len(projet['clips'])} clips)…")
+        archive = client.get(f"/api/jobs/{projet['id']}/zip")
+        archive.raise_for_status()
+
+    destination.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(io.BytesIO(archive.content)) as z:
+        z.extractall(destination)
+    print(f"   {len(list(destination.glob('*.mp4')))} clips enregistrés dans {destination}")
+    return destination
+
+
 def lire_textes(dossier: Path) -> dict[str, dict]:
     """Récupère le titre et la légende YouTube de chaque clip depuis textes.md."""
     fichier = dossier / "textes.md"
@@ -67,7 +118,9 @@ def plan(clips: list[Path], textes: dict, par_jour: int, heures: list[str],
 
 def main() -> None:
     p = argparse.ArgumentParser(description="Programme une série de clips sur YouTube.")
-    p.add_argument("dossier", nargs="?", default=".", help="dossier contenant les clips")
+    p.add_argument("dossier", nargs="?", default="",
+                   help="dossier contenant les clips ; vide = récupérer depuis le site")
+    p.add_argument("--site", default="", help="adresse du site (sinon SITE_URL du fichier .env)")
     p.add_argument("--par-jour", type=int, default=3, help="clips publiés par jour (défaut : 3)")
     p.add_argument("--heures", default="12:30,18:30,21:00",
                    help="heures de publication, séparées par des virgules (heure de Paris)")
@@ -75,7 +128,17 @@ def main() -> None:
     p.add_argument("--privacy", default="private", choices=["private", "unlisted", "public"])
     args = p.parse_args()
 
-    dossier = Path(args.dossier).expanduser().resolve()
+    if args.dossier:
+        dossier = Path(args.dossier).expanduser().resolve()
+    else:
+        env = reglages_env()
+        adresse = args.site or env.get("SITE_URL", "")
+        if not adresse:
+            adresse = input("Adresse de ton site (ex. https://leno10-clipping.hf.space) : ").strip()
+        mot_de_passe = env.get("APP_PASSWORD", "")
+        if not mot_de_passe:
+            mot_de_passe = input("Mot de passe du site (Entrée si aucun) : ").strip()
+        dossier = recuperer_du_site(adresse, mot_de_passe, RACINE.parent / "clips_du_site")
     clips = sorted(f for f in dossier.glob("*.mp4") if not f.name.startswith("source"))
     if not clips:
         raise SystemExit(f"❌ Aucun clip (.mp4) dans {dossier}")

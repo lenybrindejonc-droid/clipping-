@@ -22,6 +22,17 @@ def read_env() -> dict[str, str]:
     return env
 
 
+def _memoriser_env(valeurs: dict) -> None:
+    """Note l'adresse du site (et son mot de passe) dans .env, pour les scripts locaux."""
+    fichier = ROOT / ".env"
+    lignes = fichier.read_text().splitlines() if fichier.exists() else []
+    for cle, valeur in valeurs.items():
+        lignes = [l for l in lignes if not l.startswith(f"{cle}=")]
+        lignes.append(f"{cle}={valeur}")
+    fichier.write_text("\n".join(lignes) + "\n")
+    fichier.chmod(0o600)
+
+
 def main() -> None:
     env = read_env()
     print("\n🔑 Il faut un « token » Hugging Face avec le droit d'écriture :")
@@ -83,6 +94,8 @@ def main() -> None:
                     repo_id=repo_id, repo_type="space", commit_message="Configuration du Space")
 
     sub = re.sub(r"[^a-z0-9-]", "-", f"{user}-{SPACE_NAME}".lower())
+    _memoriser_env({"SITE_URL": f"https://{sub}.hf.space", **({"APP_PASSWORD": pw} if pw else {})})
+
     print("\n✅ C'est en ligne ! La construction prend ~5 minutes la première fois.")
     print(f"   Suivi :      https://huggingface.co/spaces/{repo_id}")
     print(f"   Ton site :   https://{sub}.hf.space  (connecte-toi d'abord à huggingface.co)")
