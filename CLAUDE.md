@@ -60,7 +60,10 @@ depuis le Space : le jeton YouTube ne doit pas être sur un serveur public).
    mieux vaut que l'utilisateur dise ses retours en conversation (on les encode dans
    `presets.py`). Le VPS réglerait ça.
 8. **Redéployer annule les vidéos en cours** — prévenir avant de proposer `deploy_hf.sh`.
-9. **Emojis incrustés = noir et blanc** (libass ne rend pas les emojis en couleur). Sans
+9. **Confusion sources / clips** : `~/videos` contient les vidéos d'origine (streams de 30 min),
+   pas les clips. Les clips se téléchargent depuis le site vers les Téléchargements ChromeOS.
+   `youtube_upload.py` prévient si la vidéo dépasse 3 min ou n'est pas verticale.
+10. **Emojis incrustés = noir et blanc** (libass ne rend pas les emojis en couleur). Sans
    importance : l'utilisateur écrit ses accroches lui-même sur TikTok, où elles s'affichent
    en couleur. Les emojis sont donc demandés dans le texte, pas dans l'incrustation.
 

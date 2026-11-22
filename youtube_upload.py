@@ -10,6 +10,7 @@ jamais, et ne les envoie nulle part.
 from __future__ import annotations
 
 import argparse
+import subprocess
 import sys
 import time
 from datetime import datetime, timezone
@@ -72,6 +73,19 @@ def identifiants():
     return creds
 
 
+def _format_video(fichier: str) -> tuple[float, int, int]:
+    """Durée et dimensions, pour prévenir si ce n'est pas un Short."""
+    try:
+        out = subprocess.run(
+            ["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries",
+             "stream=width,height:format=duration", "-of", "default=nw=1:nk=1", fichier],
+            capture_output=True, text=True, timeout=30,
+        ).stdout.split()
+        return float(out[2]), int(out[0]), int(out[1])
+    except Exception:
+        return 0.0, 0, 0
+
+
 def envoyer(args) -> None:
     corps = {
         "snippet": {
@@ -90,8 +104,11 @@ def envoyer(args) -> None:
         corps["status"]["privacyStatus"] = "private"   # obligatoire pour une publication programmée
 
     taille = Path(args.file).stat().st_size / 1048576
+    duree, largeur, hauteur = _format_video(args.file)
     print("────────── Résumé ──────────")
     print(f"Fichier     : {args.file}  ({taille:.0f} Mo)")
+    if duree:
+        print(f"Vidéo       : {int(duree // 60)} min {int(duree % 60):02d} s  ·  {largeur}x{hauteur}")
     print(f"Titre       : {corps['snippet']['title']}")
     print(f"Description : {corps['snippet']['description'][:90]}{'…' if len(corps['snippet']['description']) > 90 else ''}")
     print(f"Tags        : {', '.join(corps['snippet']['tags']) or '(aucun)'}")
@@ -100,6 +117,19 @@ def envoyer(args) -> None:
     if args.thumbnail:
         print(f"Miniature   : {args.thumbnail}")
     print("────────────────────────────")
+
+    alertes = []
+    if duree and duree > 180:
+        alertes.append(f"cette vidéo dure {int(duree // 60)} min : au-delà de 3 minutes, "
+                       "YouTube ne la traitera PAS comme un Short.")
+    if largeur and hauteur and largeur >= hauteur:
+        alertes.append(f"elle est au format {largeur}x{hauteur} (horizontal) : un Short doit être "
+                       "vertical (9:16).")
+    if alertes:
+        print()
+        for a in alertes:
+            print(f"⚠️  {a}")
+        print("   Est-ce bien un clip du site, et non la vidéo d'origine ?")
 
     if args.dry_run:
         print("🧪 --dry-run : rien n'a été envoyé. Relance sans --dry-run pour publier.")
@@ -171,7 +201,10 @@ def main() -> None:
     if not chemin.exists():
         print(f"❌ Vidéo introuvable : {args.file}")
         candidats = []
-        for dossier in (Path.home() / "videos", Path.home() / "Downloads", Path.cwd()):
+        for dossier in (Path.home() / "Downloads",
+                        Path("/mnt/chromeos/MyFiles/Downloads"),
+                        Path("/mnt/chromeos/MyFiles/Téléchargements"),
+                        Path.home() / "videos", Path.cwd()):
             if dossier.is_dir():
                 candidats += sorted(dossier.glob("*.mp4"), key=lambda f: -f.stat().st_mtime)[:4]
         if candidats:
