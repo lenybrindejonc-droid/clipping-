@@ -30,12 +30,21 @@ for video in "$VIDEOS"/*.f[0-9]*.mp4 "$VIDEOS"/*.f[0-9]*.webm; do
     continue
   fi
 
+  # Le .temp.mp4 est un assemblage inachevé, donc inutilisable : on le supprime pour
+  # libérer la place dont l'assemblage a justement besoin.
+  if [ -f "$base.temp.mp4" ]; then
+    echo "🧹 Suppression du fichier temporaire inutilisable ($(du -h "$base.temp.mp4" | cut -f1) libérés)"
+    rm -f "$base.temp.mp4"
+  fi
+
   taille_mo=$(du -m "$video" | cut -f1)
   besoin=$(( $(du -m "$video" | cut -f1) + $(du -m "$audio" | cut -f1) + 200 ))
   libre=$(df -m ~ | tail -1 | awk '{print $4}')
   if [ "$libre" -lt "$besoin" ]; then
     echo "⚠️  « $nom » : il faut ${besoin} Mo libres, tu en as ${libre}. Assemblage ignoré."
-    echo "    Libère de la place, ou agrandis le disque Linux dans les Paramètres."
+    echo "    Pour libérer de la place :"
+    echo "      rm -rf ~/videos/.encours ~/.cache/pip ~/.cache/huggingface && sudo apt clean"
+    echo "    Ou supprime une vidéo déjà traitée :  ls -1sh ~/videos"
     continue
   fi
   echo "🔧 Assemblage de « $nom »…"
