@@ -59,16 +59,14 @@ def recuperer_du_site(adresse: str, mot_de_passe: str, destination: Path,
     print(f"🔗 Connexion à {adresse}")
     try:
         return _recuperer(adresse, mot_de_passe, destination, bibliotheque)
-    except httpx.ConnectError:
-        raise SystemExit(
-            f"❌ Adresse introuvable : {adresse}\n"
-            "   Vérifie l'orthographe (exemple : leno10-clipping.hf.space).\n"
-            "   Elle est enregistrée dans le fichier .env, ligne SITE_URL :\n"
-            "     grep SITE_URL .env\n"
-            "   Tu peux aussi la donner directement :  ./programmer.sh --site TON_ADRESSE"
-        ) from None
     except httpx.HTTPError as exc:
-        raise SystemExit(f"❌ Le site n'a pas répondu correctement ({exc.__class__.__name__}).") from None
+        raise SystemExit(
+            f"❌ Impossible de joindre {adresse} ({exc.__class__.__name__}).\n"
+            "   Vérifie l'orthographe de l'adresse (exemple : leno10-clipping.hf.space)\n"
+            "   et que le site s'ouvre bien dans ton navigateur.\n"
+            "   Adresse actuellement enregistrée :  grep SITE_URL .env\n"
+            "   Pour en donner une autre :  ./programmer.sh --site TON_ADRESSE"
+        ) from None
 
 
 def _recuperer(adresse: str, mot_de_passe: str, destination: Path, bibliotheque: bool) -> Path:
