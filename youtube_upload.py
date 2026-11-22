@@ -160,8 +160,21 @@ def main() -> None:
     p.add_argument("--dry-run", action="store_true", help="afficher le résumé sans rien envoyer")
     args = p.parse_args()
 
-    if not Path(args.file).exists():
-        raise SystemExit(f"❌ Vidéo introuvable : {args.file}")
+    chemin = Path(args.file).expanduser()
+    if not chemin.exists():
+        print(f"❌ Vidéo introuvable : {args.file}")
+        candidats = []
+        for dossier in (Path.home() / "videos", Path.home() / "Downloads", Path.cwd()):
+            if dossier.is_dir():
+                candidats += sorted(dossier.glob("*.mp4"), key=lambda f: -f.stat().st_mtime)[:4]
+        if candidats:
+            print("\n   Vidéos trouvées sur cet ordinateur :")
+            for c in candidats[:8]:
+                print(f'     --file "{c}"')
+        else:
+            print("\n   Aucune vidéo trouvée. Télécharge-en une : ./telecharger.sh \"LIEN\"")
+        raise SystemExit(1)
+    args.file = str(chemin)
     if not args.title.strip():
         raise SystemExit("❌ Le titre est obligatoire.")
     envoyer(args)
