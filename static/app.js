@@ -15,6 +15,8 @@ function params() {
     min_duration: +$("min").value,
     max_duration: +$("max").value,
     layout: $("layout").value,
+    content_type: $("type").value,
+    rules: $("rules").value,
     subtitles: $("subs").checked,
     show_hook: $("hook").checked,
     high_quality: $("hq").checked,
@@ -226,6 +228,8 @@ function buildCard(job, clip, i) {
   q(".time").textContent = `${fmt(clip.start)} → ${fmt(clip.end)} · ${Math.round(clip.duration)}s`;
   q(".title").textContent = clip.title;
   q(".reason").textContent = clip.reason;
+  if (clip.kind) { q(".kind").hidden = false; q(".kind").textContent = clip.kind; }
+  if (clip.spoiler) q(".spoiler").hidden = false;
   if (clip.hook) {
     q(".hook-line").hidden = false;
     q(".hook-text").textContent = clip.hook;

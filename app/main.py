@@ -110,6 +110,8 @@ class JobRequest(BaseModel):
     min_duration: int = Field(15, ge=5, le=120)
     max_duration: int = Field(40, ge=10, le=180)
     layout: str = Field("auto", pattern="^(auto|crop|blur|gaming)$")
+    content_type: str = Field("auto", pattern="^(auto|gaming|podcast|vlog)$")
+    rules: str = Field("", max_length=1500)   # règles d'une campagne de clipping
     subtitles: bool = True
     show_hook: bool = False      # accroche incrustée sur la vidéo (sinon : texte à copier)
     high_quality: bool = False
@@ -207,6 +209,7 @@ def run_job(job_id: str) -> None:
         moments, engine, note = find_moments(
             tr["segments"], info["title"], info["duration"],
             req["num_clips"], req["min_duration"], req["max_duration"], energie,
+            req.get("content_type", "auto"), req.get("rules", ""),
         )
         t0 = _chrono("analyse IA", t0)
         if not moments:
@@ -303,6 +306,8 @@ class ClipEdit(BaseModel):
     hook: str = Field("", max_length=120)
     text: str | None = Field(None, max_length=5000)
     layout: str = Field("auto", pattern="^(auto|crop|blur|gaming)$")
+    content_type: str = Field("auto", pattern="^(auto|gaming|podcast|vlog)$")
+    rules: str = Field("", max_length=1500)   # règles d'une campagne de clipping
 
 
 def _set_clip(job_id: str, n: int, **fields) -> None:

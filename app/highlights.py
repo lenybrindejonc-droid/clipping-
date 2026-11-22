@@ -38,6 +38,50 @@ Règles supplémentaires :
 
 Le titre, le hook et la description sont dans la langue de la vidéo."""
 
+CONSIGNES = {
+    "gaming": """CONTENU : partie de jeu (let's play, stream).
+
+Un pic sonore montre qu'il s'est passé quelque chose ; à toi de décider si c'est un vrai clip,
+et où il commence et finit.
+
+Ce qui fait un bon clip :
+- Les 2 premières secondes donnent envie de rester. Commence juste avant la mise en place
+  (la police qui arrive, « regarde ça », un plan annoncé), pas deux sujets plus tôt.
+- Le dénouement est DANS le clip (le crash, l'évasion, le raté, la phrase qui fait rire).
+  Termine 1 à 2 secondes après la réaction, pas 20 secondes plus tard.
+- Il se comprend seul : si la blague demande 10 minutes de contexte, ignore-la.
+- Le joueur réagit. Du gameplay impressionnant avec un joueur silencieux vaut moins qu'une
+  vraie réaction humaine.
+- Aucun temps mort : silences longs, menus, chargements, carte, inventaire.
+- Court plutôt que long : 20 à 40 secondes sauf si l'histoire l'exige.
+
+Ce qui marche : poursuites et évasions, crashs et chutes, braquages qui tournent mal,
+comportement absurde des PNJ, cascade parfaite, le joueur qui craque, échange drôle.
+
+À ne JAMAIS choisir : cinématiques isolées ou scènes de l'histoire seules ; émissions TV ou
+radio du jeu prises seules ; triche, exploits d'argent ou d'XP, menus de mods, bugs donnant
+un avantage en ligne ; moments portés par une musique tierce jouée fort (risque de
+réclamation de droits) ; informations privées lues à voix haute, harcèlement.
+Si un clip dévoile l'histoire ou la fin du jeu, mets "spoiler": true.
+
+Accroche : 3 à 7 mots, elle prépare le dénouement sans le révéler
+(exemple de forme : « Il pensait que les flics étaient partis »).
+Titre : dit simplement ce qui se passe, sans fausse promesse.
+Description : crédite le joueur et rappelle que la vidéo source est à créditer.
+
+Sois sévère : ne propose que des passages à 60 ou plus, quitte à en rendre moins que demandé.
+Mieux vaut 3 clips forts que 8 moyens.""",
+    "podcast": """CONTENU : discussion, interview, podcast.
+Les meilleurs moments sont : une affirmation tranchée, une histoire personnelle courte et
+complète, un désaccord, une révélation chiffrée, une punchline. Le clip doit contenir une
+idée entière, du début de l'argument à sa chute. Écarte les digressions et les exemples
+interminables.""",
+    "vlog": """CONTENU : vlog, vidéo face caméra.
+Les meilleurs moments sont : une anecdote complète, un conseil concret applicable tout de
+suite, un moment d'émotion sincère, un retournement dans le récit. Évite de couper au milieu
+d'une explication.""",
+}
+
 SCHEMA = {
     "type": "object",
     "properties": {
@@ -53,10 +97,14 @@ SCHEMA = {
                     "description": {"type": "string", "description": "légende prête à poster"},
                     "hashtags": {"type": "array", "items": {"type": "string"}},
                     "virality_score": {"type": "integer", "description": "0 à 100"},
+                    "kind": {"type": "string", "description":
+                             "gameplay | reaction | chase | fail | funny | skill | cutscene | other"},
+                    "spoiler": {"type": "boolean",
+                                "description": "vrai si le clip dévoile l'histoire du jeu"},
                     "reason": {"type": "string", "description": "pourquoi ce passage peut marcher"},
                 },
                 "required": ["start", "end", "title", "hook", "description", "hashtags",
-                             "virality_score", "reason"],
+                             "virality_score", "kind", "spoiler", "reason"],
                 "additionalProperties": False,
             },
         }
@@ -116,10 +164,15 @@ def _transcript_text(segments: list[dict]) -> str:
     return "\n".join(lignes)
 
 
-def ask_claude(segments, title, n, min_d, max_d) -> list[dict]:
+def ask_claude(segments, title, n, min_d, max_d, content_type="auto", rules="") -> list[dict]:
     import anthropic
 
     client = anthropic.Anthropic()
+    consigne = CONSIGNES.get(content_type, "")
+    systeme = f"{SYSTEM}\n\n{consigne}" if consigne else SYSTEM
+    if rules.strip():
+        systeme += ("\n\nRÈGLES DE LA CAMPAGNE — elles priment sur tout ce qui précède :\n"
+                    + rules.strip()[:1500])
     prompt = (
         f"Titre de la vidéo : {title}\n"
         f"Trouve les {n} meilleurs moments pour des shorts de {min_d} à {max_d} secondes, "
@@ -128,7 +181,7 @@ def ask_claude(segments, title, n, min_d, max_d) -> list[dict]:
     with client.beta.messages.stream(
         model=MODEL,
         max_tokens=32000,
-        system=SYSTEM,
+        system=systeme,
         messages=[{"role": "user", "content": prompt}],
         thinking={"type": "adaptive"},
         output_config={"effort": "high", "format": {"type": "json_schema", "schema": SCHEMA}},
@@ -205,7 +258,8 @@ def _snap(clips, segments, duration, min_d, max_d) -> list[dict]:
 
 
 def find_moments(segments, title, duration, n=8, min_d=20, max_d=60,
-                 energy: list[float] | None = None) -> tuple[list[dict], str, str]:
+                 energy: list[float] | None = None,
+                 content_type: str = "auto", rules: str = "") -> tuple[list[dict], str, str]:
     if not segments:
         return [], "aucune parole détectée", ""
     annotate_energy(segments, energy or [])
@@ -213,7 +267,7 @@ def find_moments(segments, title, duration, n=8, min_d=20, max_d=60,
     try:
         if not (os.getenv("ANTHROPIC_API_KEY") or "").startswith("sk-ant-"):
             raise RuntimeError("aucune clé ANTHROPIC_API_KEY valide dans le fichier .env")
-        clips = ask_claude(segments, title, n, min_d, max_d)
+        clips = ask_claude(segments, title, n, min_d, max_d, content_type, rules)
     except Exception as exc:  # repli hors-ligne
         note = _explain(exc)
         print(f"[highlights] Claude indisponible ({note}), repli heuristique")
