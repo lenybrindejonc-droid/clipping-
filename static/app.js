@@ -195,14 +195,24 @@ function openJob(id) {
 
 async function poll() {
   const id = currentId;
+  if (document.visibilityState === "hidden") {   // onglet en arrière-plan : on attend
+    pollTimer = setTimeout(poll, 5000);
+    return;
+  }
   const res = await fetch(`/api/jobs/${id}`);
   if (!res.ok) { $("current").hidden = true; return; }
   const job = await res.json();
   if (id !== currentId) return;
   render(job);
   const busy = job.clips.some((c) => c.rendering);
-  if (!["done", "error"].includes(job.status) || busy) pollTimer = setTimeout(poll, 1500);
-  else loadHistory();
+  if (!["done", "error"].includes(job.status) || busy) {
+    pollTimer = setTimeout(poll, 1500);
+  } else {
+    loadHistory();
+    // Le projet est terminé, mais on continue à regarder de loin : si tu refais un clip
+    // depuis un autre appareil, cette page s'en aperçoit au lieu de rester figée.
+    pollTimer = setTimeout(poll, 10000);
+  }
 }
 
 function render(job) {
