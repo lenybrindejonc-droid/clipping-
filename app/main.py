@@ -145,11 +145,19 @@ def _load_existing() -> None:
 _load_existing()
 
 def _clean_sources(keep: str | None) -> None:
-    """Garde la vidéo source d'un seul projet (pour pouvoir modifier ses clips) : le disque est petit."""
+    """Libère le disque en supprimant les vidéos sources devenues inutiles.
+
+    Une vidéo TÉLÉCHARGÉE peut être récupérée à tout moment : on la supprime sans risque.
+    Une vidéo ENVOYÉE depuis l'ordinateur est irremplaçable : on garde les 2 plus récentes,
+    pour que leurs clips restent modifiables.
+    """
     if os.getenv("KEEP_SOURCE", "0") == "1":
         return
+    envoyees = sorted((j for j in jobs.values() if not j["request"].get("url")),
+                      key=lambda j: -j["created_at"])[:2]
+    proteges = {keep} | {j["id"] for j in envoyees}
     for f in JOBS.glob("*/source*"):
-        if f.parent.name != keep:
+        if f.parent.name not in proteges:
             f.unlink(missing_ok=True)
 
 
@@ -364,7 +372,10 @@ def rerender_clip(job_id: str, n: int, edit: dict) -> None:
     try:
         src = next((f for f in work.glob("source.*") if f.suffix in (".mp4", ".mkv", ".webm")), None)
         if src is None and not req.get("url"):
-            raise RuntimeError("la vidéo envoyée n'est plus sur le serveur : renvoie-la pour modifier ce clip")
+            raise RuntimeError(
+                "la vidéo d'origine n'est plus sur le serveur (effacée au redémarrage du site, "
+                "ou remplacée par des vidéos plus récentes). Renvoie le même fichier : "
+                "les clips du nouveau projet seront modifiables")
         if src is None:
             _set_clip(job_id, n, rendering="Re-téléchargement de la vidéo…")
             _clean_sources(keep=job_id)

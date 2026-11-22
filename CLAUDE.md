@@ -35,7 +35,8 @@ depuis le Space : le jeton YouTube ne doit pas être sur un serveur public).
   (`APP_PASSWORD`), parce que les Spaces privés ne s'ouvrent pas depuis Safari iOS.
 - Tout est prêt pour un **VPS auto-hébergé** (`deploy_vps.sh`, Docker Compose + Caddy,
   HTTPS gratuit via sslip.io). Moins cher, clips conservés, reste privé. Décision reportée.
-- L'utilisateur n'a **pas encore** jugé une série de clips de bout en bout.
+- **Premier vrai résultat (22/11)** : 5 clips produits, 3 jugés très bons (moments et accroches
+  réussis), 2 avec un problème de cadrage — à creuser.
 
 ## Pièges rencontrés (ne pas refaire le diagnostic)
 
