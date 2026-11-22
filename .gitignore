@@ -5,3 +5,5 @@ __pycache__/
 .venv/
 cookies.txt
 .deploy_vps.conf
+client_secret.json
+token.json

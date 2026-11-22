@@ -35,6 +35,39 @@ docker build -t clipping .
 docker run -p 8000:8000 -e ANTHROPIC_API_KEY=sk-ant-... -v $(pwd)/data:/srv/data clipping
 ```
 
+## Publier sur YouTube
+
+Publication depuis ton ordinateur (pas depuis le site : un jeton d'accès à la chaîne n'a
+rien à faire sur un serveur public).
+
+### Préparation, une seule fois
+
+1. Crée un projet sur https://console.cloud.google.com et active **YouTube Data API v3**.
+2. Écran de consentement OAuth : type **Externe**, ajoute ton adresse Gmail en
+   **utilisateur test**, puis **publie l'application** (sinon l'autorisation expire tous les 7 jours).
+3. Identifiants → **ID client OAuth** → type **Application de bureau** → télécharge le fichier
+   et renomme-le `client_secret.json`, à déposer dans le dossier `clipping-`.
+
+`client_secret.json` et `token.json` sont ignorés par git : ils restent sur ta machine.
+
+### Publier un clip
+
+```bash
+./publier.sh "~/Téléchargements/mon_clip.mp4" "GTA 6 : la poursuite finit mal" "Extrait du live. #Shorts #GTA6"
+```
+
+Le script affiche d'abord un aperçu et demande confirmation. Options utiles :
+
+```bash
+--privacy public                      # publier tout de suite (par défaut : privé)
+--publish-at "2026-11-25 18:30"       # programmer (heure de Paris)
+--tags gta6,gaming
+```
+
+**Deux limites de YouTube :** environ **6 envois par jour** avec le quota gratuit, et tant que
+ton projet Google n'a pas passé l'audit YouTube, les vidéos envoyées par l'API **restent
+privées** — à rendre publiques à la main dans YouTube Studio.
+
 ## Apprentissage des retours
 
 Chaque clip peut être noté sur la page (👍 / 👎 avec la raison). Les avis sont enregistrés

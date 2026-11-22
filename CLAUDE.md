@@ -26,7 +26,8 @@ Chaîne de traitement (`app/`) :
 
 Skills du compte utilisés comme référence : `choix-moments-clips-gta` (grille de sélection,
 intégrée dans `presets.py`) et `gta6-clip-production` (3 accroches, légendes TikTok/YouTube/Reels,
-vérification des règles de campagne). `youtube-upload-auto` (publication) n'est pas encore branché.
+vérification des règles de campagne). `youtube-upload-auto` → `youtube_upload.py` + `publier.sh` (publication **locale**, jamais
+depuis le Space : le jeton YouTube ne doit pas être sur un serveur public).
 
 ## État au 22/11/2026
 
@@ -74,6 +75,7 @@ vérification des règles de campagne). `youtube-upload-auto` (publication) n'es
 ./diagnostic.sh "LIEN"            # bilan complet quand YouTube refuse
 ./deploy_hf.sh                    # met à jour le site sur Hugging Face
 ./deploy_vps.sh                   # déploie sur un serveur auto-hébergé
+./publier.sh "clip.mp4" "Titre"   # publie sur YouTube (aperçu + confirmation obligatoires)
 ```
 
 ## Clés et réglages (`.env`, jamais dans git)
@@ -99,4 +101,6 @@ vérification des règles de campagne). `youtube-upload-auto` (publication) n'es
 1. Suivi de la personne qui parle (podcasts à plusieurs) ; facecam indiquée à la main si la
    détection la rate.
    (Rien de réutilisable trouvé sur GitHub pour les critères par type : `presets.py` est maison.)
-2. Musique de fond libre de droits, zooms automatiques, publication directe TikTok/YouTube.
+2. Musique de fond libre de droits, publication directe TikTok.
+3. YouTube : quota ~6 envois/jour ; vidéos forcées en privé tant que le projet Google n'a pas
+   passé l'audit YouTube. `client_secret.json` et `token.json` sont dans `.gitignore`.
