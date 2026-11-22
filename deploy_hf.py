@@ -46,7 +46,12 @@ def main() -> None:
     repo_id = f"{user}/{SPACE_NAME}"
     print(f"\n👤 Connecté en tant que {user}")
 
-    # 1. Space privé
+    # 1. Space : privé à la création, puis on respecte ton choix
+    existait = True
+    try:
+        api.repo_info(repo_id, repo_type="space")
+    except Exception:
+        existait = False
     try:
         api.create_repo(repo_id, repo_type="space", space_sdk="docker", private=True, exist_ok=True)
     except Exception as exc:
@@ -58,9 +63,15 @@ def main() -> None:
                 "   → Ou garder le site sur ton PC avec ./start.sh"
             )
         raise
-    if not api.repo_info(repo_id, repo_type="space").private:
-        api.update_repo_settings(repo_id, private=True, repo_type="space")
-    print("🔒 Space privé créé :", repo_id)
+    prive = api.repo_info(repo_id, repo_type="space").private
+    if existait:
+        etat = "privé" if prive else "public (protégé par ton mot de passe)"
+        print(f"📦 Space existant, laissé {etat} : {repo_id}")
+        if prive:
+            print("   ⚠️  Un Space privé ne s'ouvre pas depuis Safari iOS ni depuis programmer.sh.")
+            print("      Pour le rendre public : Settings → Change visibility sur huggingface.co")
+    else:
+        print("🔒 Space privé créé :", repo_id)
 
     # 2. Secrets (chiffrés chez Hugging Face, jamais dans le code)
     secrets = {k: env.get(k, "") for k in ("ANTHROPIC_API_KEY", "GROQ_API_KEY")}
