@@ -392,11 +392,11 @@ def rerender_clip(job_id: str, n: int, edit: dict) -> None:
 
         words = _words(work)
         if edit["text"] is not None and edit["text"].strip() != _clip_text(words, clip["start"], clip["end"]).strip():
+            # sous-titres corrigés à la main : on garde la correction pour les prochains montages
             words = _apply_text_edit(words, clip["start"], clip["end"], edit["text"])
             tr = json.loads((work / "transcript.json").read_text())
             tr["words_edited"] = words
-            t0 = _chrono("transcription", t0)
-        (work / "transcript.json").write_text(json.dumps(tr, ensure_ascii=False))
+            (work / "transcript.json").write_text(json.dumps(tr, ensure_ascii=False))
 
         start, end = edit["start"], edit["end"]
         pipeline.render_clip(

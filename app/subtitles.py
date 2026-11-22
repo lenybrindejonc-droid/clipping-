@@ -43,8 +43,9 @@ def _ts(t: float) -> str:
     return f"{int(h)}:{int(m):02d}:{s:05.2f}"
 
 
-def _clean(word: str) -> str:
-    return word.replace("{", "").replace("}", "").replace("\\", "").upper()
+def _clean(word: str, majuscules: bool = True) -> str:
+    texte = word.replace("{", "").replace("}", "").replace("\\", "")
+    return texte.upper() if majuscules else texte
 
 
 def write_ass(
@@ -105,7 +106,8 @@ def write_ass(
         # Bandeau visible pendant les 4 premières secondes (le moment où on décide de scroller)
         hook_end = min(4.0, clip_end - clip_start)
         events.insert(0, f"Dialogue: 1,{_ts(0)},{_ts(hook_end)},Hook,,0,0,0,,"
-                         f"{hook_tag}{{\\fad(120,300)}}{_clean(hook)}")
+                         # l'accroche garde son écriture normale, contrairement aux sous-titres
+                         f"{hook_tag}{{\\fad(120,300)}}{_clean(hook, majuscules=False)}")
 
     header = f"""[Script Info]
 ScriptType: v4.00+

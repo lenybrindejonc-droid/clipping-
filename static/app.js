@@ -287,22 +287,61 @@ function buildCard(job, clip, i) {
   if (accroches.length) {
     q(".hooks").hidden = false;
     accroches.forEach((h) => {
+      const ligne = document.createElement("div");
+      ligne.className = "hook-ligne";
+
       const b = document.createElement("button");
       b.type = "button";
       b.className = "hook-chip";
       b.innerHTML = `<b></b><span class="muted small"></span>`;
       b.querySelector("b").textContent = h.texte;
-      b.querySelector("span").textContent =
-        [h.style, h.pourquoi].filter(Boolean).join(" — ");
+      b.querySelector("span").textContent = [h.style, h.pourquoi].filter(Boolean).join(" — ");
+      b.title = "Copier cette accroche";
       b.addEventListener("click", async () => {
         await navigator.clipboard.writeText(h.texte);
         const champ = q(".e-hook");
-        if (champ) champ.value = h.texte;      // prête à être incrustée si tu le veux
+        if (champ) champ.value = h.texte;
         b.classList.add("copie");
         setTimeout(() => b.classList.remove("copie"), 1500);
       });
-      q(".hooks-list").appendChild(b);
+
+      const poser = document.createElement("button");
+      poser.type = "button";
+      poser.className = "btn ghost poser";
+      poser.textContent = "🎬 Sur la vidéo";
+      poser.title = "Refaire ce clip avec cette accroche incrustée";
+      poser.addEventListener("click", async () => {
+        poser.disabled = true;
+        poser.textContent = "Montage…";
+        const res = await fetch(`/api/jobs/${job.id}/clips/${i}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            start: clip.start, end: clip.end, hook: h.texte,
+            layout: clip.layout || job.request.layout || "auto", text: null,
+          }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok) {
+          render(data);
+          clearTimeout(pollTimer);
+          pollTimer = setTimeout(poll, 1500);
+        } else {
+          alert(typeof data.detail === "string" ? data.detail : "Montage impossible.");
+          poser.disabled = false;
+          poser.textContent = "🎬 Sur la vidéo";
+        }
+      });
+
+      ligne.append(b, poser);
+      q(".hooks-list").appendChild(ligne);
     });
+    if (clip.hook_on_video) {
+      const info = document.createElement("p");
+      info.className = "muted small";
+      info.textContent = `Accroche actuellement sur la vidéo : « ${clip.hook_on_video} »`;
+      q(".hooks").appendChild(info);
+    }
   }
 
   // --- Vérification des règles de campagne

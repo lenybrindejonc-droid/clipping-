@@ -453,7 +453,7 @@ def render_clip(
             f"[top][bot]vstack,setsar=1"
         )
         sub_pos = (OUT_W // 2, top_h)            # sous-titres sur la jonction
-        hook_pos = (OUT_W // 2, OUT_H - 260)     # accroche en bas, sur le jeu
+        hook_pos = (OUT_W // 2, top_h + 165)     # accroche juste en dessous
     elif mode == "track":
         base = (f"[0:v]crop=w={crop_w}:h={src_h}:x='{data}':y=0,"
                 f"scale={OUT_W}:{OUT_H}:flags=lanczos,{sharpen},setsar=1")

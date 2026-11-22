@@ -120,3 +120,6 @@ label.wide { grid-column: 1 / -1; }
 .verif { font-size: 13px; }
 .verif summary { cursor: pointer; }
 .verif-list { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; }
+.hook-ligne { display: flex; gap: 6px; align-items: stretch; }
+.hook-ligne .hook-chip { flex: 1; }
+.poser { white-space: nowrap; padding: 8px 10px; font-size: 13px; }
