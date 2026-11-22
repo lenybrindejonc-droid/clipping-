@@ -121,6 +121,27 @@
         </div>
         <button class="btn ghost edit-toggle" type="button">✏️ Modifier</button>
 
+        <div class="avis">
+          <span class="muted small">Ton avis :</span>
+          <button type="button" class="btn ghost vote-bon">👍 Bon</button>
+          <button type="button" class="btn ghost vote-mauvais">👎 Pas bon</button>
+        </div>
+        <form class="avis-detail" hidden>
+          <label>Qu'est-ce qui n'allait pas ?
+            <select class="avis-raison">
+              <option value="pas_interessant">Le passage n'a pas d'intérêt</option>
+              <option value="debut_tot">Commence trop tôt</option>
+              <option value="debut_tard">Commence trop tard, on rate le début</option>
+              <option value="fin_tot">Se termine trop tôt, la chute est coupée</option>
+              <option value="fin_tard">Traîne après la chute</option>
+              <option value="hors_contexte">Incompréhensible sans le reste</option>
+              <option value="accroche">Accroche ou titre à côté</option>
+            </select></label>
+          <input class="avis-note" type="text" maxlength="200" placeholder="Précision (facultatif)" />
+          <button type="submit" class="btn">Envoyer mon avis</button>
+        </form>
+        <p class="avis-merci muted small" hidden></p>
+
         <form class="editor" hidden>
           <div class="trim">
             <span class="trim-label">Début</span>

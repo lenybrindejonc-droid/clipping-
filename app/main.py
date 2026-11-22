@@ -23,7 +23,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Redirect
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, ValidationError
 
-from . import pipeline
+from . import lessons, pipeline
 from .highlights import find_moments
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -600,6 +600,35 @@ def delete_job(job_id: str):
         futures.pop(job_id, None)
     shutil.rmtree(JOBS / job_id, ignore_errors=True)
     return {"ok": True}
+
+
+class Avis(BaseModel):
+    verdict: str = Field(pattern="^(bon|mauvais)$")
+    raison: str = Field("", max_length=40)
+    note: str = Field("", max_length=200)
+
+
+@app.post("/api/jobs/{job_id}/clips/{n}/avis")
+def noter_clip(job_id: str, n: int, avis: Avis):
+    """Enregistre l'avis sur un clip : il servira aux analyses suivantes."""
+    job = jobs.get(job_id)
+    if not job or not 0 <= n < len(job["clips"]):
+        raise HTTPException(404, "Clip introuvable.")
+    clip = job["clips"][n]
+    total = lessons.ajouter(avis.verdict, avis.raison, avis.note, {
+        "titre": clip.get("title", "")[:80], "kind": clip.get("kind", ""),
+        "duree": clip.get("duration"), "type_contenu": job["request"].get("content_type", "auto"),
+    })
+    _set_clip(job_id, n, avis=avis.verdict)
+    return {"ok": True, "total_avis": total,
+            "message": "Merci : l'IA en tiendra compte pour les prochaines vidéos."
+                       if total >= 3 else
+                       f"Noté ({total}/3 avis avant que l'IA commence à s'en servir)."}
+
+
+@app.get("/api/lessons")
+def voir_lessons():
+    return {"resume": lessons.resume() or "Pas encore assez de retours."}
 
 
 @app.get("/media/{job_id}/{name}")

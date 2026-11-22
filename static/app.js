@@ -261,6 +261,34 @@ function buildCard(job, clip, i) {
     return node;
   }
 
+  // --- Avis sur le clip (sert à améliorer les prochains lots)
+  const envoyerAvis = async (verdict, raison = "", note = "") => {
+    const r = await fetch(`/api/jobs/${job.id}/clips/${i}/avis`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ verdict, raison, note }),
+    });
+    const d = await r.json().catch(() => ({}));
+    q(".avis").hidden = true;
+    q(".avis-detail").hidden = true;
+    q(".avis-merci").hidden = false;
+    q(".avis-merci").textContent = r.ok ? d.message : "Avis non enregistré.";
+  };
+  if (clip.avis) {
+    q(".avis").hidden = true;
+    q(".avis-merci").hidden = false;
+    q(".avis-merci").textContent = clip.avis === "bon" ? "👍 noté comme bon" : "👎 noté";
+  }
+  q(".vote-bon").addEventListener("click", () => envoyerAvis("bon"));
+  q(".vote-mauvais").addEventListener("click", () => {
+    q(".avis").hidden = true;
+    q(".avis-detail").hidden = false;
+  });
+  q(".avis-detail").addEventListener("submit", (e) => {
+    e.preventDefault();
+    envoyerAvis("mauvais", q(".avis-raison").value, q(".avis-note").value);
+  });
+
   // --- Éditeur
   const editor = q(".editor");
   const state = { start: clip.start, end: clip.end };

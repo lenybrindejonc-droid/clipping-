@@ -101,3 +101,7 @@ h3 { color: var(--muted); font-size: 14px; text-transform: uppercase; letter-spa
 label.wide { grid-column: 1 / -1; }
 .kind { font-size: 12px; border: 1px solid var(--line); border-radius: 99px; padding: 1px 8px; }
 .spoiler { margin: 0; font-size: 13px; }
+.avis { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.avis .btn { padding: 8px 12px; font-size: 14px; }
+.avis-detail { display: flex; flex-direction: column; gap: 8px; border-top: 1px solid var(--line); padding-top: 10px; }
+.avis-merci { margin: 0; }

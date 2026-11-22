@@ -170,6 +170,12 @@ def ask_claude(segments, title, n, min_d, max_d, content_type="auto", rules="") 
     client = anthropic.Anthropic()
     consigne = CONSIGNES.get(content_type, "")
     systeme = f"{SYSTEM}\n\n{consigne}" if consigne else SYSTEM
+    from . import lessons
+
+    appris = lessons.resume()
+    if appris:
+        systeme += ("\n\nRETOURS DE L'UTILISATEUR sur tes choix précédents — tiens-en compte :\n"
+                    + appris)
     if rules.strip():
         systeme += ("\n\nRÈGLES DE LA CAMPAGNE — elles priment sur tout ce qui précède :\n"
                     + rules.strip()[:1500])

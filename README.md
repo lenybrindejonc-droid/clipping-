@@ -35,6 +35,13 @@ docker build -t clipping .
 docker run -p 8000:8000 -e ANTHROPIC_API_KEY=sk-ant-... -v $(pwd)/data:/srv/data clipping
 ```
 
+## Apprentissage des retours
+
+Chaque clip peut être noté sur la page (👍 / 👎 avec la raison). Les avis sont enregistrés
+dans `data/lessons.json` et résumés dans les consignes données à l'IA au lot suivant
+(à partir de 3 avis). Sur Hugging Face, ce fichier est effacé au redémarrage du Space ;
+sur un serveur auto-hébergé il est conservé.
+
 ## Réglages (variables d'environnement)
 
 Voir `.env.example` : `WHISPER_MODEL` (`base` par défaut (rapide) ; `small`, `medium`, `large-v3` plus précis mais plus lents),
