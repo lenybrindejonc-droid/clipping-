@@ -59,6 +59,22 @@ def recuperer_du_site(adresse: str, mot_de_passe: str, destination: Path,
     print(f"🔗 Connexion à {adresse}")
     try:
         return _recuperer(adresse, mot_de_passe, destination, bibliotheque)
+    except httpx.HTTPStatusError as exc:
+        code = exc.response.status_code
+        explications = {
+            401: "mot de passe du site refusé.",
+            403: "accès refusé par le site.",
+            404: "page introuvable : le site répond, mais pas l'application.\n"
+                 "   Ton Space est peut-être encore privé, ou l'adresse pointe ailleurs.",
+            503: "le site est en train de démarrer (mise en veille).\n"
+                 "   Ouvre-le dans ton navigateur, attends qu'il affiche la page, puis relance.",
+            500: "erreur interne du site : regarde les journaux du Space.",
+        }
+        raise SystemExit(
+            f"❌ Le site a répondu {code} — {explications.get(code, 'réponse inattendue.')}\n"
+            f"   Adresse essayée : {adresse}\n"
+            f"   Ouvre-la dans ton navigateur pour vérifier qu'elle fonctionne."
+        ) from None
     except httpx.HTTPError as exc:
         raise SystemExit(
             f"❌ Impossible de joindre {adresse} ({exc.__class__.__name__}).\n"
