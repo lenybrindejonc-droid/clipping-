@@ -56,6 +56,24 @@ def recuperer_du_site(adresse: str, mot_de_passe: str, destination: Path,
     import httpx
 
     adresse = _adresse_propre(adresse)
+    print(f"🔗 Connexion à {adresse}")
+    try:
+        return _recuperer(adresse, mot_de_passe, destination, bibliotheque)
+    except httpx.ConnectError:
+        raise SystemExit(
+            f"❌ Adresse introuvable : {adresse}\n"
+            "   Vérifie l'orthographe (exemple : leno10-clipping.hf.space).\n"
+            "   Elle est enregistrée dans le fichier .env, ligne SITE_URL :\n"
+            "     grep SITE_URL .env\n"
+            "   Tu peux aussi la donner directement :  ./programmer.sh --site TON_ADRESSE"
+        ) from None
+    except httpx.HTTPError as exc:
+        raise SystemExit(f"❌ Le site n'a pas répondu correctement ({exc.__class__.__name__}).") from None
+
+
+def _recuperer(adresse: str, mot_de_passe: str, destination: Path, bibliotheque: bool) -> Path:
+    import httpx
+
     with httpx.Client(base_url=adresse, timeout=600, follow_redirects=True) as client:
         if mot_de_passe:
             client.post("/login", data={"password": mot_de_passe})
