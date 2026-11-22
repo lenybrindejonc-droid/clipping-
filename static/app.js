@@ -17,6 +17,8 @@ function params() {
     layout: $("layout").value,
     content_type: $("type").value,
     facecam: $("facecam").value,
+    streamer: $("streamer").value,
+    jeu: $("jeu").value,
     rules: $("rules").value,
     subtitles: $("subs").checked,
     show_hook: $("hook").checked,

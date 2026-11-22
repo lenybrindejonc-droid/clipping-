@@ -32,9 +32,20 @@ Pour chaque clip, propose EXACTEMENT 3 accroches différentes (champ "hooks"), d
 maximum, avec une ligne expliquant pourquoi chacune peut marcher : une question, une
 affirmation, et une qui annonce le résultat sans le dévoiler. Mets la meilleure dans "hook".
 L'accroche doit tenir sa promesse : jamais de propos inventés, jamais de titre mensonger.
-Termine chaque accroche par 1 ou 2 emojis qui collent à l'émotion du moment (😭 pour le
-désespoir, 💀 pour l'échec, 🚨 pour la poursuite, 😳 pour la surprise, 🔥 pour l'exploit).
-Jamais d'emoji au milieu d'une phrase, et jamais plus de deux.
+STYLE DES ACCROCHES — à respecter strictement :
+« <streamer> <ce qu'il fait, au présent> dans <jeu><2 emojis> »
+Exemple de forme : « <streamer> se fait arrêter juste avant la planque dans <jeu>😳😳 »
+
+- Phrase déclarative à la 3e personne, au présent, qui DÉCRIT l'action sans la juger.
+- 6 à 12 mots, nom du streamer et nom du jeu compris.
+- Ponctuation normale, pas de majuscules d'imprimerie, pas de point final.
+- Pas de point d'interrogation, pas d'exclamation, pas de promesse du type « incroyable »
+  ou « tu ne vas pas y croire » : l'action suffit.
+- Ne dévoile jamais l'issue : « tente d'arrêter le train » et non « échoue à arrêter le train ».
+- Termine par exactement 2 emojis collés au dernier mot, choisis selon l'émotion
+  (😳😳 surprise, 😭😭 désespoir, 💀💀 échec, 🚨🚨 poursuite, 🔥🔥 exploit).
+- Les 3 accroches gardent ce format ; elles ne diffèrent que par l'action mise en avant
+  et les emojis.
 
 Rédige aussi une légende par plateforme (champ "captions") :
 - tiktok : environ 150 caractères, 3 à 5 hashtags ;
@@ -201,7 +212,8 @@ def _transcript_text(segments: list[dict]) -> str:
     return "\n".join(lignes)
 
 
-def ask_claude(segments, title, n, min_d, max_d, content_type="auto", rules="") -> list[dict]:
+def ask_claude(segments, title, n, min_d, max_d, content_type="auto", rules="",
+               streamer="", jeu="") -> list[dict]:
     import anthropic
 
     client = anthropic.Anthropic()
@@ -213,6 +225,13 @@ def ask_claude(segments, title, n, min_d, max_d, content_type="auto", rules="") 
     if appris:
         systeme += ("\n\nRETOURS DE L'UTILISATEUR sur tes choix précédents — tiens-en compte :\n"
                     + appris)
+    if streamer.strip() or jeu.strip():
+        systeme += (f"\n\nPour les accroches : le streamer s'appelle « {streamer.strip() or 'le streamer'} » "
+                    f"et le jeu est « {jeu.strip() or 'le jeu'} ». Utilise ces noms exacts.")
+    elif content_type == "gaming":
+        systeme += ("\n\nTu ne connais ni le nom du streamer ni celui du jeu : commence l'accroche "
+                    "directement par l'action, sans inventer de nom.")
+
     if rules.strip():
         systeme += (
             "\n\nRÈGLES DE LA CAMPAGNE — elles priment sur tout ce qui précède :\n"
@@ -308,7 +327,8 @@ def _snap(clips, segments, duration, min_d, max_d) -> list[dict]:
 
 def find_moments(segments, title, duration, n=8, min_d=20, max_d=60,
                  energy: list[float] | None = None, motion: list[float] | None = None,
-                 content_type: str = "auto", rules: str = "") -> tuple[list[dict], str, str]:
+                 content_type: str = "auto", rules: str = "",
+                 streamer: str = "", jeu: str = "") -> tuple[list[dict], str, str]:
     if not segments:
         return [], "aucune parole détectée", ""
     annotate_energy(segments, energy or [])
@@ -317,7 +337,7 @@ def find_moments(segments, title, duration, n=8, min_d=20, max_d=60,
     try:
         if not (os.getenv("ANTHROPIC_API_KEY") or "").startswith("sk-ant-"):
             raise RuntimeError("aucune clé ANTHROPIC_API_KEY valide dans le fichier .env")
-        clips = ask_claude(segments, title, n, min_d, max_d, content_type, rules)
+        clips = ask_claude(segments, title, n, min_d, max_d, content_type, rules, streamer, jeu)
     except Exception as exc:  # repli hors-ligne
         note = _explain(exc)
         print(f"[highlights] Claude indisponible ({note}), repli heuristique")

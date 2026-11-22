@@ -113,6 +113,8 @@ class JobRequest(BaseModel):
     content_type: str = Field("auto", pattern="^(auto|gaming|podcast|vlog|tuto|humour|sport)$")
     facecam: str = Field("auto", pattern="^(auto|hg|hd|bg|bd|aucune)$")
     rules: str = Field("", max_length=1500)   # règles d'une campagne de clipping
+    streamer: str = Field("", max_length=60)  # nom à placer dans les accroches
+    jeu: str = Field("", max_length=60)       # nom du jeu
     subtitles: bool = True
     show_hook: bool = False      # accroche incrustée sur la vidéo (sinon : texte à copier)
     zoom: bool = True            # zoom progressif sur le moment fort
@@ -255,6 +257,7 @@ def run_job(job_id: str) -> None:
             tr["segments"], info["title"], info["duration"],
             req["num_clips"], req["min_duration"], req["max_duration"], energie, mouvement,
             req.get("content_type", "auto"), req.get("rules", ""),
+            req.get("streamer", ""), req.get("jeu", ""),
         )
         t0 = _chrono("analyse IA", t0)
         if not moments:
@@ -358,6 +361,8 @@ class ClipEdit(BaseModel):
     content_type: str = Field("auto", pattern="^(auto|gaming|podcast|vlog|tuto|humour|sport)$")
     facecam: str = Field("auto", pattern="^(auto|hg|hd|bg|bd|aucune)$")
     rules: str = Field("", max_length=1500)   # règles d'une campagne de clipping
+    streamer: str = Field("", max_length=60)  # nom à placer dans les accroches
+    jeu: str = Field("", max_length=60)       # nom du jeu
 
 
 def _set_clip(job_id: str, n: int, **fields) -> None:
