@@ -73,10 +73,6 @@ def identifiants():
 
 
 def envoyer(args) -> None:
-    from googleapiclient.discovery import build
-    from googleapiclient.errors import HttpError
-    from googleapiclient.http import MediaFileUpload
-
     corps = {
         "snippet": {
             "title": args.title[:100],
@@ -108,6 +104,17 @@ def envoyer(args) -> None:
     if args.dry_run:
         print("🧪 --dry-run : rien n'a été envoyé. Relance sans --dry-run pour publier.")
         return
+
+    try:
+        from googleapiclient.discovery import build
+        from googleapiclient.errors import HttpError
+        from googleapiclient.http import MediaFileUpload
+    except ImportError:
+        raise SystemExit(
+            "❌ Les bibliothèques Google ne sont pas installées.\n"
+            "   Lance : .venv/bin/pip install google-api-python-client google-auth-oauthlib\n"
+            "   (ou utilise ./publier.sh, qui s'en occupe tout seul)"
+        ) from None
 
     service = build("youtube", "v3", credentials=identifiants(), cache_discovery=False)
     media = MediaFileUpload(args.file, chunksize=8 * 1024 * 1024, resumable=True,
