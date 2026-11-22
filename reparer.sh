@@ -30,9 +30,18 @@ for video in "$VIDEOS"/*.f[0-9]*.mp4 "$VIDEOS"/*.f[0-9]*.webm; do
     continue
   fi
 
+  taille_mo=$(du -m "$video" | cut -f1)
+  besoin=$(( $(du -m "$video" | cut -f1) + $(du -m "$audio" | cut -f1) + 200 ))
+  libre=$(df -m ~ | tail -1 | awk '{print $4}')
+  if [ "$libre" -lt "$besoin" ]; then
+    echo "⚠️  « $nom » : il faut ${besoin} Mo libres, tu en as ${libre}. Assemblage ignoré."
+    echo "    Libère de la place, ou agrandis le disque Linux dans les Paramètres."
+    continue
+  fi
   echo "🔧 Assemblage de « $nom »…"
   echo "    image : $(du -h "$video" | cut -f1)   son : $(du -h "$audio" | cut -f1)"
-  if ffmpeg -nostdin -loglevel error -y -i "$video" -i "$audio" \
+  echo "    ⏳ environ $(( taille_mo / 200 + 1 )) min — NE PAS appuyer sur Ctrl+C."
+  if ffmpeg -nostdin -loglevel warning -stats -y -i "$video" -i "$audio" \
        -map 0:v:0 -map 1:a:0 -c copy -movflags +faststart "$sortie.tmp.mp4"; then
     duree=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$sortie.tmp.mp4" 2>/dev/null || echo 0)
     if [ "${duree%.*}" -gt 5 ] 2>/dev/null; then
@@ -46,7 +55,8 @@ for video in "$VIDEOS"/*.f[0-9]*.mp4 "$VIDEOS"/*.f[0-9]*.webm; do
     fi
   else
     rm -f "$sortie.tmp.mp4"
-    echo "    ❌ assemblage impossible : retéléchargement nécessaire"
+    echo "    ❌ assemblage interrompu ou impossible."
+    echo "       Les morceaux sont conservés : relance ./reparer.sh et laisse-le finir."
   fi
 done
 
