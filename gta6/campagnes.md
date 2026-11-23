@@ -42,6 +42,17 @@ après les 10 % de frais**. Ce n'est qu'un calcul, pas une prévision de tes ré
   promotion de ce genre de site, et une pub doit être signalée comme telle. Le site de
   clipping n'est pas conçu pour ce format. Avis : ne pas en faire la priorité.
 
+### « BenDaDonnn x Puffco GTA 6 » (vue le 23/11/2026, lancée 4 jours avant)
+
+- Type : Launch Clipping, payée au CPM. **1,00 $ les 1 000 vues**, minimum 2 $, plafond 400 $ par clip.
+- Plateformes : TikTok, Instagram, **YouTube**, X, Facebook (même taux partout).
+- Budget : 1 011 $ dépensés sur 10 000 $, 104 participants.
+- Consigne visible : clipper BenDaDonnn pendant qu'il utilise des produits Puffco en jouant à GTA 6.
+- **Colle bien au site** (vrai clipping de stream GTA, YouTube Shorts accepté).
+- **Risque :** Puffco fabrique des vaporisateurs, utilisés surtout pour le cannabis. TikTok et
+  YouTube retirent les vidéos qui mettent en avant du matériel de drogue. Lire le brief pour
+  savoir ce qui doit être montré à l'image.
+
 ## À faire toi-même
 
 1. Créer un compte sur **contentrewards.com** et connecter tes comptes TikTok et YouTube.
