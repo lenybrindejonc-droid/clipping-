@@ -74,6 +74,7 @@ def write_ass(
     hook_pos: tuple[int, int] | None = None,
     style: dict | None = None,
     hook_fin: float | None = None,
+    reaction: str | None = None,
 ) -> None:
     style = style or {}
     mots_max = min(MOTS_MAX, max(MOTS_MIN, int(style.get("mots", WORDS_PER_LINE))))
@@ -135,6 +136,14 @@ def write_ass(
         if end - start >= 0.04:
             events.append(f"Dialogue: 0,{_ts(start)},{_ts(end)},Main,,0,0,0,,{text}")
 
+    duree = clip_end - clip_start
+    if reaction:
+        # Ta réaction prend la place de l'accroche pour la 2e moitié du clip (même zone :
+        # jamais deux textes l'un sur l'autre)
+        debut_reaction = max(duree / 2, 2.0) if hook else 0.0
+        hook_fin = min(hook_fin or duree, debut_reaction)
+        events.insert(0, f"Dialogue: 1,{_ts(debut_reaction)},{_ts(duree)},Reaction,,0,0,0,,"
+                         f"{hook_tag}{{\\fad(120,0)}}{_clean(reaction, majuscules=False)}")
     if hook:
         # Visible DÈS LA PREMIÈRE IMAGE (c'est là qu'on décide de scroller), jusqu'à hook_fin
         # (par défaut : tout le clip)
@@ -153,6 +162,7 @@ ScaledBorderAndShadow: yes
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
 Style: Main,{FONT},{taille},&H00FFFFFF,&H00FFFFFF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,7,2,2,60,60,{int(h * hauteur)},1
+Style: Reaction,{FONT},60,&H00111111,&H00FFFFFF,&H0000E5FF,&H0000E5FF,-1,0,0,0,100,100,0,0,3,18,0,8,90,90,{int(h * 0.12)},1
 Style: Hook,{FONT},64,&H00111111,&H00FFFFFF,&H00FFFFFF,&H00FFFFFF,-1,0,0,0,100,100,0,0,3,18,0,8,90,90,{int(h * 0.12)},1
 
 [Events]

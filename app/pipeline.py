@@ -184,15 +184,20 @@ def probe_fps(path: Path) -> float:
         return 30.0
 
 
-def _zoom_filter(pic: float, fps: float, amplitude: float = 0.14) -> str:
-    """Zoom progressif centré sur le moment fort : montée, maintien, retour au calme."""
+def _zoom_filter(pics, fps: float, amplitude: float = 0.14) -> str:
+    """Zoom progressif sur chaque moment fort : montée, maintien, retour au calme.
+
+    `pics` : un instant ou une liste d'instants (secondes depuis le début du clip).
+    Plusieurs petits zooms rythment le clip et le rendent différent de la source."""
     montee, maintien, retour = 0.35, 1.2, 0.7
     t = f"(on/{fps:.3f})"
-    d, f_ = pic - montee, pic + maintien            # début de la montée, fin du maintien
-    z = (f"if(lt({t},{d:.2f}),1,"
-         f"if(lt({t},{pic:.2f}),1+{amplitude}*({t}-{d:.2f})/{montee},"
-         f"if(lt({t},{f_:.2f}),{1 + amplitude:.3f},"
-         f"if(lt({t},{f_ + retour:.2f}),{1 + amplitude:.3f}-{amplitude}*({t}-{f_:.2f})/{retour},1))))")
+    z = "1"
+    for pic in sorted(pics if isinstance(pics, (list, tuple)) else [pics], reverse=True):
+        d, f_ = pic - montee, pic + maintien            # début de la montée, fin du maintien
+        z = (f"if(between({t},{d:.2f},{f_ + retour:.2f}),"
+             f"if(lt({t},{pic:.2f}),1+{amplitude}*({t}-{d:.2f})/{montee},"
+             f"if(lt({t},{f_:.2f}),{1 + amplitude:.3f},"
+             f"{1 + amplitude:.3f}-{amplitude}*({t}-{f_:.2f})/{retour})),{z})")
     return (f"zoompan=z='{z}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'"
             f":d=1:s={OUT_W}x{OUT_H}:fps={fps:.3f}")
 
@@ -491,12 +496,13 @@ def render_clip(
     hook: str | None = None,
     high_quality: bool = False,
     sub_style: dict | None = None,
-    zoom_at: float | None = None,
+    zoom_at: float | list | None = None,
     facecam: str = "auto",
     overlay: Path | None = None,
     overlay_pos: str = "bas",
     masquer_texte: bool = False,
     hook_fin: float | None = None,
+    reaction: str | None = None,
 ) -> list:
     """Découpe [start, end], recadre en 9:16 et incruste les sous-titres.
 
@@ -555,13 +561,16 @@ def render_clip(
     filters.append(base)
 
     # Zoom AVANT les sous-titres : ils doivent rester fixes et nets
-    if zoom_at is not None and 0.5 < zoom_at < duration - 0.5:
-        filters.append(_zoom_filter(zoom_at, probe_fps(src)))
+    pics = [p for p in (zoom_at if isinstance(zoom_at, (list, tuple)) else [zoom_at])
+            if p is not None and 0.5 < p < duration - 0.5]
+    if pics:
+        filters.append(_zoom_filter(pics, probe_fps(src)))
 
-    if (subtitles and words) or hook:
+    if (subtitles and words) or hook or reaction:
         ass = out.with_suffix(".ass")
         write_ass(ass, words if subtitles else [], start, end, OUT_W, OUT_H, hook=hook,
-                  sub_pos=sub_pos, hook_pos=hook_pos, style=sub_style, hook_fin=hook_fin)
+                  sub_pos=sub_pos, hook_pos=hook_pos, style=sub_style, hook_fin=hook_fin,
+                  reaction=reaction)
         filters.append(f"ass={ass.name}")
 
     entrees = ["-ss", f"{start:.3f}", "-t", f"{duration:.3f}", "-i", str(src.resolve())]

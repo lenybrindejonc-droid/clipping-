@@ -220,31 +220,24 @@ def _progress(job_id: str, stage: str):
     return cb
 
 
-def _pic_du_clip(energie: list[float], mouvement: list[float],
-                 start: float, end: float) -> float | None:
-    """Seconde la plus forte du clip (son + image), mesurée depuis son début."""
-    import numpy as np
+def _pics_du_clip(energie: list[float], mouvement: list[float], start: float, end: float,
+                  nombre: int = 3, ecart: float = 5.0) -> list[float]:
+    """Jusqu'à 3 moments forts du clip (son + image), espacés d'au moins 5 s : un petit
+    zoom sur chacun rythme le clip. Toujours au moins le pic principal s'il existe."""
+    from .highlights import intensite
 
-    i0, i1 = int(start), int(end)
+    courbe = intensite(energie, mouvement, start, end)
     duree = end - start
-
-    def normalise(valeurs):
-        part = valeurs[i0:i1] if valeurs else []
-        if len(part) < 3:
-            return None
-        a = np.array(part, dtype=float)
-        etendue = a.max() - a.min()
-        return (a - a.min()) / etendue if etendue > 1e-6 else None
-
-    courbes = [c for c in (normalise(energie), normalise(mouvement)) if c is not None]
-    if not courbes:
-        return None
-    n = min(len(c) for c in courbes)
-    score = sum(c[:n] for c in courbes)
-    pic = float(np.argmax(score)) + 0.5          # milieu de la seconde la plus forte
-    if pic < 1.0 or pic > duree - 1.5:           # il faut la place pour la montée et le retour
-        return None
-    return round(pic, 2)
+    if courbe is None or courbe.max() <= 0:
+        return []
+    pics: list[float] = []
+    for i in sorted(range(len(courbe)), key=lambda k: -courbe[k]):
+        t = i + 0.5
+        if courbe[i] < 0.75 * courbe.max() or len(pics) >= nombre:
+            break
+        if 1.0 <= t <= duree - 1.5 and all(abs(t - p) >= ecart for p in pics):
+            pics.append(round(t, 2))
+    return sorted(pics)
 
 
 def _sous_titres_ok(req: dict, conf: float | None) -> bool:
@@ -299,6 +292,7 @@ def run_job(job_id: str) -> None:
             print(f"[analyse] profil d'image indisponible ({exc})", flush=True)
             mouvement = []
         t0 = _chrono("analyse son et image", t0)
+        (work / "profils.json").write_text(json.dumps({"energie": energie, "mouvement": mouvement}))
 
         _progress(job_id, "analyze")(0.3, "L'IA cherche les moments les plus viraux…")
         moments, engine, note = find_moments(
@@ -339,12 +333,13 @@ def run_job(job_id: str) -> None:
                 masquer_texte=req.get("masquer_texte", True),
                 high_quality=req.get("high_quality", False),
                 sub_style=reglages["sous_titres"], facecam=req.get("facecam", "auto"),
-                zoom_at=(_pic_du_clip(energie, mouvement, m["start"], m["end"])
+                zoom_at=(_pics_du_clip(energie, mouvement, m["start"], m["end"])
                          if reglages.get("zoom") and req.get("zoom", True) else None),
                 overlay=_overlay_path(req.get("overlay", "")),
                 overlay_pos=req.get("overlay_pos", "bas"),
             )
-            clips.append({**m, "hook_on_video": textes.sans_emojis(m["hook"]) if req.get("show_hook") else "",
+            publier = time.strftime("%Y-%m-%d", time.localtime(time.time() + 86400 * (i - 1)))
+            clips.append({**m, "publier_le": publier, "reaction": "", "hook_on_video": textes.sans_emojis(m["hook"]) if req.get("show_hook") else "",
                           "texte_source_floute": len(zones),
                           "file": name, "thumb": name.replace(".mp4", ".jpg"),
                           "duration": round(m["end"] - m["start"], 1), "layout": req["layout"],
@@ -374,6 +369,15 @@ def run_job(job_id: str) -> None:
 
 
 # ---------------------------------------------------------------- modification d'un clip
+
+def _profils(work: Path) -> tuple[list, list]:
+    """Profils son et image de la source (pour refaire les zooms lors d'une modification)."""
+    try:
+        d = json.loads((work / "profils.json").read_text())
+        return d.get("energie") or [], d.get("mouvement") or []
+    except Exception:
+        return [], []
+
 
 def _words(work: Path) -> list[dict]:
     tr = json.loads((work / "transcript.json").read_text())
@@ -425,6 +429,7 @@ class ClipEdit(BaseModel):
     start: float = Field(ge=0)
     end: float = Field(gt=0)
     hook: str = Field("", max_length=120)
+    reaction: str = Field("", max_length=100)   # ta propre réaction, incrustée en 2e moitié
     text: str | None = Field(None, max_length=5000)
     layout: str = Field("auto", pattern="^(auto|crop|blur|gaming)$")
     content_type: str = Field("auto", pattern="^(auto|gaming|podcast|vlog|tuto|humour|sport)$")
@@ -473,11 +478,15 @@ def rerender_clip(job_id: str, n: int, edit: dict) -> None:
             src, work / clip["file"], start, end, words, layout=edit["layout"],
             subtitles=_sous_titres_ok(req, conf), hook=textes.sans_emojis(edit["hook"]) or None,
             masquer_texte=req.get("masquer_texte", True),
+            reaction=textes.sans_emojis(edit.get("reaction", "")) or None,
+            zoom_at=(_pics_du_clip(*_profils(work), start, end)
+                     if presets.get(req.get("content_type", "auto")).get("zoom")
+                     and req.get("zoom", True) else None),
             high_quality=req.get("high_quality", False), facecam=req.get("facecam", "auto"),
             overlay=_overlay_path(req.get("overlay", "")), overlay_pos=req.get("overlay_pos", "bas"),
         )
         _set_clip(job_id, n, start=round(start, 2), end=round(end, 2), duration=round(end - start, 1),
-                  confiance_sous_titres=conf,
+                  confiance_sous_titres=conf, reaction=edit.get("reaction", "").strip(),
                   hook_on_video=edit["hook"].strip(), layout=edit["layout"],
                   text=_clip_text(words, start, end),
                   version=clip.get("version", 1) + 1, rendering=None, error=None)
@@ -862,7 +871,8 @@ def garder_automatiquement(job: dict, clip: dict) -> dict | None:
 
     entree = {k: clip.get(k) for k in ("title", "hook", "hooks", "description", "captions",
                                        "hashtags", "kind", "spoiler", "duration",
-                                       "virality_score", "campaign_check")}
+                                       "virality_score", "campaign_check", "publier_le",
+                                       "rapport", "mis_de_cote")}
     entree |= {"id": cle, "projet": job.get("title") or job["id"], "ajoute_le": time.time(),
                "publie_le": None, "youtube_id": ""}
     (dossier / "meta.json").write_text(json.dumps(entree, ensure_ascii=False, indent=1))
@@ -890,7 +900,8 @@ def garder_clip(job_id: str, n: int):
 
     entree = {k: clip.get(k) for k in ("title", "hook", "hooks", "description", "captions",
                                        "hashtags", "kind", "spoiler", "duration",
-                                       "virality_score", "campaign_check")}
+                                       "virality_score", "campaign_check", "publier_le",
+                                       "rapport", "mis_de_cote")}
     entree |= {"id": cle, "projet": job.get("title") or job_id, "ajoute_le": time.time(),
                "publie_le": None, "youtube_id": ""}
     (dossier / "meta.json").write_text(json.dumps(entree, ensure_ascii=False, indent=1))
@@ -967,7 +978,10 @@ def _fiche_textes(job: dict) -> str:
                    f"Durée : {c.get('duration')} s · score {c.get('virality_score')}/100"
                    + (f" · {c.get('kind')}" if c.get("kind") else "")
                    + (" · ⚠️ SPOILER" if c.get("spoiler") else ""),
-                   f"Fichier : {c.get('file')}", ""]
+                   f"Fichier : {c.get('file')}",
+                   f"Source : {c.get('projet') or job.get('title') or '?'}"
+                   + (f" · à publier le {c['publier_le']} (1 clip par source et par jour)"
+                      if c.get("publier_le") else ""), ""]
         accroches = c.get("hooks") or ([{"texte": c["hook"], "pourquoi": ""}] if c.get("hook") else [])
         if accroches:
             lignes.append("Accroches proposées :")

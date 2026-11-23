@@ -264,7 +264,8 @@ function buildCard(job, clip, i) {
   video.src = src;
   video.poster = `/media/${job.id}/${clip.thumb}?v=${v}`;
   q(".score").textContent = `🔥 ${clip.virality_score}/100`;
-  q(".time").textContent = `${fmt(clip.start)} → ${fmt(clip.end)} · ${Math.round(clip.duration)}s`;
+  q(".time").textContent = `${fmt(clip.start)} → ${fmt(clip.end)} · ${Math.round(clip.duration)}s`
+    + (clip.publier_le ? ` · à publier le ${clip.publier_le.split("-").reverse().slice(0, 2).join("/")}` : "");
   q(".title").textContent = clip.title;
   q(".reason").textContent = clip.reason;
   if (clip.kind) { q(".kind").hidden = false; q(".kind").textContent = clip.kind; }
@@ -338,7 +339,7 @@ function buildCard(job, clip, i) {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            start: clip.start, end: clip.end, hook: h.texte,
+            start: clip.start, end: clip.end, hook: h.texte, reaction: clip.reaction || "",
             layout: clip.layout || job.request.layout || "auto", text: null,
           }),
         });
@@ -435,6 +436,7 @@ function buildCard(job, clip, i) {
     q(".edit-toggle").textContent = editor.hidden ? "✏️ Modifier" : "Fermer l'éditeur";
   });
   q(".e-hook").value = clip.hook_on_video || "";
+  q(".e-reaction").value = clip.reaction || "";
   q(".e-text").value = clip.text || "";
   q(".e-layout").value = clip.layout || job.request.layout || "auto";
   editor.querySelectorAll(".step").forEach((b) =>
@@ -450,6 +452,7 @@ function buildCard(job, clip, i) {
   q(".cancel").addEventListener("click", () => {
     state.start = clip.start; state.end = clip.end;
     q(".e-hook").value = clip.hook_on_video || "";
+    q(".e-reaction").value = clip.reaction || "";
     q(".e-text").value = clip.text || "";
     show();
     editor.hidden = true;
@@ -466,6 +469,7 @@ function buildCard(job, clip, i) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           start: state.start, end: state.end, hook: q(".e-hook").value, layout: q(".e-layout").value,
+          reaction: q(".e-reaction").value,
           // texte envoyé seulement s'il a été corrigé (sinon il suit les nouvelles bornes)
           text: textChanged ? q(".e-text").value : null,
         }),
