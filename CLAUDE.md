@@ -30,15 +30,22 @@ intégrée dans `presets.py`) et `gta6-clip-production` (3 accroches, légendes 
 vérification des règles de campagne). `youtube-upload-auto` → `youtube_upload.py` + `publier.sh` (publication **locale**, jamais
 depuis le Space : le jeton YouTube ne doit pas être sur un serveur public).
 
-## État au 22/11/2026
+## État au 23/11/2026
 
 - **Hébergé sur Hugging Face Spaces** (PRO, ~9 $/mois), Space **public** + mot de passe
   (`APP_PASSWORD`), parce que les Spaces privés ne s'ouvrent pas depuis Safari iOS.
 - Tout est prêt pour un **VPS auto-hébergé** (`deploy_vps.sh`, Docker Compose + Caddy,
   HTTPS gratuit via sslip.io). Moins cher, clips conservés, reste privé. Décision reportée.
-- **Résultats (22/11)** : 1er lot = 5 clips, 3 très bons, 2 au cadrage raté (facecam non
-  reconnue → cadrage « visage plein écran », corrigé depuis : seuils élargis + choix manuel
-  du coin). 2e lot jugé **« très bien »** par l'utilisateur : la chaîne est validée.
+- **Résultats** : 1er lot = 5 clips, 3 très bons, 2 au cadrage raté (facecam non reconnue →
+  cadrage « visage plein écran », corrigé : seuils élargis + choix manuel du coin).
+  2e lot jugé **« très bien »** : la chaîne est validée.
+- **Mot de passe du site oublié** par l'utilisateur → il doit relancer `./deploy_hf.sh` pour en
+  choisir un nouveau (il est ensuite lisible dans `.env`), et **remettre le Space en public**.
+- **Objectif actuel : les campagnes Content Rewards** (contentrewards.com). Notes et sources
+  datées dans `gta6/campagnes.md`. Les campagnes fournissent les rushs → plus de combat avec
+  YouTube. L'utilisateur a TikTok + YouTube Shorts, sans préférence de streamer.
+  Je ne peux PAS parcourir les campagnes : liste derrière connexion, et la lecture des pages a
+  été refusée par une sécurité de l'environnement. Il colle les briefs, je règle le site dessus.
 
 ## Pièges rencontrés (ne pas refaire le diagnostic)
 
@@ -114,12 +121,28 @@ depuis le Space : le jeton YouTube ne doit pas être sur un serveur public).
 - `lessons.json` (avis sur les clips) est relu par `highlights.py` à chaque analyse :
   c'est la boucle d'amélioration, ne pas la casser.
 
+## Ce que l'interface sait faire (détails utiles)
+
+- **Accroches** : 3 propositions de 3 styles — descriptif (celui que l'utilisateur veut :
+  `<streamer> <action au présent> dans <jeu>` + 2 emojis), citation, question. Champs
+  « Nom du streamer » et « Jeu » obligatoires pour le style descriptif.
+- **Bouton « 🎬 Sur la vidéo »** sur chaque accroche : refait ce clip seul avec elle incrustée,
+  en écriture normale, **juste sous les sous-titres** (position calquée sur un exemple TikTok
+  qu'il a envoyé). Non incrustée par défaut : il préfère l'écrire lui-même sur TikTok.
+- **Modification impossible pendant le montage** : boutons désactivés, message explicite.
+- **Projet terminé = rafraîchissement lent (10 s)** pour voir les changements faits depuis un
+  autre appareil (son iPhone restait figé avant).
+- **Bibliothèque** : onglet 📚, tout clip gardé 30 jours automatiquement.
+- **Téléchargement groupé** : clips + `textes.md` (accroches, légendes, vérifications).
+
 ## Pistes non faites
 
 1. Suivi de la personne qui parle (podcasts à plusieurs).
    (Rien de réutilisable trouvé sur GitHub ni pour les critères par type, ni pour l'écriture
    des accroches : `presets.py` est maison.)
 2. Musique de fond libre de droits, publication directe TikTok.
+2b. Suivi des gains : `gta6/suivi.csv` décrit par le skill `gta6-campagnes-et-gains`, pas encore
+   créé (attendre qu'il publie ses premiers clips sous campagne).
 3. YouTube : projet Google en mode **Test** (la production exige site web + page de
    confidentialité) → autorisation renouvelée tous les 7 jours, automatiquement par le script.
    Quota ~6 envois/jour ; vidéos forcées en privé tant que le projet n'a pas passé l'audit.
