@@ -29,6 +29,19 @@ campagne avant de clipper.**
 Exemple de calcul, à 1,00 $ les 1 000 vues : un clip à 20 000 vues rapporte 20 $, soit **18 $
 après les 10 % de frais**. Ce n'est qu'un calcul, pas une prévision de tes résultats.
 
+## Campagnes vues par l'utilisateur
+
+### « GTA VI Lucia vs Fanvue AI Lucia » (vue le 23/11/2026, lancée le jour même)
+
+- Type : Bounty, payée au CPM. **1,50 $ les 1 000 vues**, minimum 1,50 $, plafond 200 $ par clip.
+- Plateformes : **Instagram et TikTok seulement** (pas YouTube Shorts).
+- Budget : 7 $ dépensés sur 5 000 $, 3 participants.
+- Brief et document de référence visibles seulement après avoir rejoint la campagne.
+- **Attention :** ce n'est pas du clipping de stream. C'est une pub pour Fanvue, un site
+  d'abonnement pour adultes (« crée ta propre fille IA comme Lucia »). TikTok limite la
+  promotion de ce genre de site, et une pub doit être signalée comme telle. Le site de
+  clipping n'est pas conçu pour ce format. Avis : ne pas en faire la priorité.
+
 ## À faire toi-même
 
 1. Créer un compte sur **contentrewards.com** et connecter tes comptes TikTok et YouTube.
