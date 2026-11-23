@@ -75,6 +75,15 @@ après les 10 % de frais**. Ce n'est qu'un calcul, pas une prévision de tes ré
   - à lire avant de publier : guide d'échauffement des nouveaux comptes, processus
     d'approbation, guide pour cibler le public américain.
 
+### Pistes françaises (recherche web du 23/11/2026, à vérifier sur le site)
+
+- « FR $4,000 BICHOU MIAMI » (Content Rewards) : 1,00 $ les 1 000 vues, 142 clippeurs
+  (source : heistclips.com, relevé du 19/11). Seule campagne GTA étiquetée « FR » trouvée.
+- Catégorie « French Clipping » sur Content Rewards (ex. une campagne Call of Duty FR, fermée).
+- Ssemble (ssemble.com/fr/clip-rewards) : place de marché française, 0,10 à 3 $ les 1 000 vues.
+- Raison du choix FR : Boeshi exige 40 % de public USA/UK/CAN/AUS, difficile pour un compte
+  français.
+
 ## À faire toi-même
 
 1. Créer un compte sur **contentrewards.com** et connecter tes comptes TikTok et YouTube.
