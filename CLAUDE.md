@@ -46,7 +46,11 @@ depuis le Space : le jeton YouTube ne doit pas être sur un serveur public).
   YouTube. L'utilisateur a TikTok + YouTube Shorts, sans préférence de streamer.
   Je ne peux PAS parcourir les campagnes : liste derrière connexion, et la lecture des pages a
   été refusée par une sécurité de l'environnement. Il colle les briefs, je règle le site dessus.
-- **Campagne choisie : « Boeshi GTA 6 Clipping »** (brief complet résumé dans `gta6/campagnes.md`).
+- **Campagne visée maintenant : « FR $4,000 BICHOU MIAMI »** (public français, plus logique
+  pour lui que Boeshi qui exige 40 % de public anglophone). Il poste depuis un **compte dédié
+  à Bichou, lien en bio**. Brief pas encore reçu → ensuite ajouter un choix « Campagne → Bichou »
+  dans `static/app.js` (comme Boeshi), en français.
+- Campagne Boeshi (mise de côté) : « Boeshi GTA 6 Clipping » (brief complet résumé dans `gta6/campagnes.md`).
   Écartées : Fanvue (pub pour site adulte), Puffco (matériel de cannabis, risque de retrait).
   Le site a un choix « Campagne → Boeshi » qui remplit tout (anglais, 15 clips de 15–45 s,
   mention `twitch.tv/darealboeshi` ajoutée à chaque légende, consignes du brief).
