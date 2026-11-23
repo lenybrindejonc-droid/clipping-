@@ -264,6 +264,13 @@ function buildCard(job, clip, i) {
   video.poster = `/media/${job.id}/${clip.thumb}?v=${v}`;
   q(".score").textContent = `🔥 ${clip.virality_score}/100`;
   q(".time").textContent = `${fmt(clip.start)} → ${fmt(clip.end)} · ${Math.round(clip.duration)}s`;
+  // Confiance de la transcription : sous 60 %, le clip sort sans sous-titres
+  const conf = clip.confiance_sous_titres;
+  if (conf != null) {
+    q(".time").textContent += conf >= 0.6
+      ? ` · sous-titres ${Math.round(conf * 100)} %`
+      : ` · sans sous-titres (transcription douteuse, ${Math.round(conf * 100)} %)`;
+  }
   q(".title").textContent = clip.title;
   q(".reason").textContent = clip.reason;
   if (clip.kind) { q(".kind").hidden = false; q(".kind").textContent = clip.kind; }

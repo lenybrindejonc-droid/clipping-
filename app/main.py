@@ -25,6 +25,7 @@ from pydantic import BaseModel, Field, ValidationError
 
 from . import lessons, pipeline, presets
 from .highlights import find_moments
+from .subtitles import SEUIL_CLIP, confiance
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA = Path(os.getenv("DATA_DIR", ROOT / "data")).resolve()
@@ -245,6 +246,12 @@ def _pic_du_clip(energie: list[float], mouvement: list[float],
     return round(pic, 2)
 
 
+def _sous_titres_ok(req: dict, conf: float | None) -> bool:
+    """Sous-titres seulement si la transcription du clip est assez sûre (sinon : aucun,
+    plutôt qu'un texte absurde)."""
+    return bool(req.get("subtitles", True)) and (conf is None or conf >= SEUIL_CLIP)
+
+
 def _chrono(stage: str, t0: float) -> float:
     now = time.time()
     print(f"[durée] {stage} : {now - t0:.0f} s", flush=True)
@@ -274,7 +281,7 @@ def run_job(job_id: str) -> None:
         _update(job_id, title=info["title"], channel=info["channel"], duration=info["duration"])
 
         tr = pipeline.transcribe(info["path"], _progress(job_id, "transcribe"), req.get("language"),
-                                 info["duration"])
+                                 info["duration"], [req.get("streamer", ""), req.get("jeu", "")])
         t0 = _chrono("transcription", t0)
         (work / "transcript.json").write_text(json.dumps(tr, ensure_ascii=False))
 
@@ -313,9 +320,11 @@ def run_job(job_id: str) -> None:
         for i, m in enumerate(moments, 1):
             render((i - 1) / len(moments), f"Montage du clip {i}/{len(moments)}…")
             name = f"clip_{i:02d}.mp4"
+            conf = confiance(words, m["start"], m["end"])
+            m["confiance_sous_titres"] = conf
             pipeline.render_clip(
                 info["path"], work / name, m["start"], m["end"], words,
-                layout=req["layout"], subtitles=req["subtitles"],
+                layout=req["layout"], subtitles=_sous_titres_ok(req, conf),
                 hook=m.get("hook") if req.get("show_hook") else None,
                 high_quality=req.get("high_quality", False),
                 sub_style=reglages["sous_titres"], facecam=req.get("facecam", "auto"),
@@ -447,13 +456,15 @@ def rerender_clip(job_id: str, n: int, edit: dict) -> None:
             (work / "transcript.json").write_text(json.dumps(tr, ensure_ascii=False))
 
         start, end = edit["start"], edit["end"]
+        conf = confiance(words, start, end)
         pipeline.render_clip(
             src, work / clip["file"], start, end, words, layout=edit["layout"],
-            subtitles=req["subtitles"], hook=edit["hook"].strip() or None,
+            subtitles=_sous_titres_ok(req, conf), hook=edit["hook"].strip() or None,
             high_quality=req.get("high_quality", False), facecam=req.get("facecam", "auto"),
             overlay=_overlay_path(req.get("overlay", "")), overlay_pos=req.get("overlay_pos", "bas"),
         )
         _set_clip(job_id, n, start=round(start, 2), end=round(end, 2), duration=round(end - start, 1),
+                  confiance_sous_titres=conf,
                   hook_on_video=edit["hook"].strip(), layout=edit["layout"],
                   text=_clip_text(words, start, end),
                   version=clip.get("version", 1) + 1, rendering=None, error=None)

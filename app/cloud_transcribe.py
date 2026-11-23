@@ -41,11 +41,13 @@ def check() -> str:
     return "" if r.status_code < 400 else f"Groq a répondu {r.status_code}"
 
 
-def _post(audio: Path, language: str | None) -> dict:
+def _post(audio: Path, language: str | None, prompt: str = "") -> dict:
     data: dict = {"model": MODEL, "response_format": "verbose_json",
                   "timestamp_granularities[]": ["word", "segment"]}
     if language:
         data["language"] = language
+    if prompt:   # les noms à reconnaître (Michou, GTA 6…) : écrits correctement du premier coup
+        data["prompt"] = prompt[:800]
     headers = {"Authorization": f"Bearer {os.environ['GROQ_API_KEY'].strip()}"}
     for attempt in range(5):
         with audio.open("rb") as f:
@@ -66,7 +68,20 @@ def _post(audio: Path, language: str | None) -> dict:
     raise RuntimeError("limite Groq atteinte, réessaie plus tard")
 
 
-def transcribe(path: Path, duration: float, progress, language: str | None = None) -> dict:
+def _confiance(s: dict) -> float:
+    """Confiance d'une phrase (0 à 1). Groq ne note pas chaque mot, mais chaque phrase :
+    probabilité moyenne, risque que ce soit du silence, et texte anormalement répétitif."""
+    import math
+
+    p = math.exp(min(0.0, float(s.get("avg_logprob", 0.0))))
+    p *= 1.0 - min(1.0, float(s.get("no_speech_prob", 0.0)))
+    if float(s.get("compression_ratio", 1.0)) > 2.4:   # boucle typique d'une invention
+        p *= 0.5
+    return round(p, 3)
+
+
+def transcribe(path: Path, duration: float, progress, language: str | None = None,
+               prompt: str = "") -> dict:
     segments: list[dict] = []
     lang = language
     n = max(1, int(-(-duration // CHUNK)))
@@ -76,7 +91,7 @@ def transcribe(path: Path, duration: float, progress, language: str | None = Non
             offset = i * CHUNK
             part = Path(tmp) / f"part{i}.mp3"
             _encode(path, part, offset, CHUNK)
-            res = _post(part, language)
+            res = _post(part, language, prompt)
             lang = lang or res.get("language")
             words = [{"start": round(w["start"] + offset, 2), "end": round(w["end"] + offset, 2),
                       "word": w["word"].strip()} for w in res.get("words") or [] if w["word"].strip()]
@@ -88,6 +103,8 @@ def transcribe(path: Path, duration: float, progress, language: str | None = Non
                 if idx >= 0:
                     buckets[idx].append(w)
             for s, ws in zip(segs, buckets):
+                p = _confiance(s)
+                ws = [{**w, "p": p} for w in ws]
                 segments.append({
                     "start": round(s["start"] + offset, 2), "end": round(s["end"] + offset, 2),
                     "text": s["text"].strip(), "words": ws,

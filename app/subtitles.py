@@ -12,6 +12,25 @@ MAX_CHARS = 16   # au-delà, la ligne passerait sur 2 lignes à l'écran
 # Petit retard : un sous-titre légèrement en retard se remarque moins qu'un en avance
 DELAY = float(os.getenv("SUBTITLE_DELAY", "0.08"))
 HOLD = 0.35      # le dernier mot d'une phrase reste un peu après avoir été prononcé
+MOTS_MIN, MOTS_MAX = 2, 4   # 2 à 4 mots à l'écran à la fois
+# Confiance de la transcription (0 à 1). Sous ces seuils, mieux vaut rien qu'un texte absurde.
+SEUIL_MOT = float(os.getenv("SEUIL_SOUS_TITRES_MOT", "0.5"))       # un mot
+SEUIL_GROUPE = float(os.getenv("SEUIL_SOUS_TITRES", "0.6"))        # un groupe de mots affiché
+SEUIL_CLIP = float(os.getenv("SEUIL_SOUS_TITRES_CLIP", "0.6"))     # le clip entier
+
+
+def confiance(words: list[dict], start: float, end: float) -> float | None:
+    """Confiance moyenne des mots du clip (pondérée par leur durée), ou None si inconnue."""
+    notes = [(w["p"], max(w["end"] - w["start"], 0.05)) for w in words
+             if w.get("p") is not None and w["end"] > start and w["start"] < end]
+    if not notes:
+        return None
+    return round(sum(p * d for p, d in notes) / sum(d for _, d in notes), 3)
+
+
+def _fiable(groupe: list[dict]) -> bool:
+    notes = [w["p"] for w in groupe if w.get("p") is not None]
+    return not notes or sum(notes) / len(notes) >= SEUIL_GROUPE
 
 
 def _fix_timing(words: list[dict]) -> list[dict]:
@@ -56,13 +75,14 @@ def write_ass(
     style: dict | None = None,
 ) -> None:
     style = style or {}
-    mots_max = int(style.get("mots", WORDS_PER_LINE))
+    mots_max = min(MOTS_MAX, max(MOTS_MIN, int(style.get("mots", WORDS_PER_LINE))))
     taille = int(style.get("taille", 96))
     hauteur = float(style.get("hauteur", 0.27))
     chars_max = MAX_CHARS + 6 * (mots_max - WORDS_PER_LINE)
     sub_tag = f"{{\\an5\\pos({sub_pos[0]},{sub_pos[1]})}}" if sub_pos else ""
     hook_tag = f"{{\\an5\\pos({hook_pos[0]},{hook_pos[1]})}}" if hook_pos else ""
-    words = [x for x in _fix_timing(words) if x["end"] > clip_start and x["start"] < clip_end]
+    words = [x for x in _fix_timing(words) if x["end"] > clip_start and x["start"] < clip_end
+             and (x.get("p") is None or x["p"] >= SEUIL_MOT)]   # mot douteux : on le saute
 
     # Regroupe les mots en petites lignes
     groups: list[list[dict]] = []
@@ -76,6 +96,18 @@ def write_ass(
         ):
             groups.append([])
         groups[-1].append(word)
+
+    # Un mot seul à l'écran se lit mal : on le rattache au groupe voisin s'il est proche
+    fusion: list[list[dict]] = []
+    for group in groups:
+        if (fusion and (len(group) < MOTS_MIN or len(fusion[-1]) < MOTS_MIN)
+                and len(fusion[-1]) + len(group) <= MOTS_MAX
+                and group[0]["start"] - fusion[-1][-1]["end"] <= 1.0):
+            fusion[-1].extend(group)
+        else:
+            fusion.append(group)
+    # Groupe trop incertain (« DU QUI JET ») : on ne l'affiche pas
+    groups = [g for g in fusion if _fiable(g)]
 
     # (début, fin, texte) pour chaque mot ; une seule ligne à l'écran à la fois
     timeline: list[list] = []

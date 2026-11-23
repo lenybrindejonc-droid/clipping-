@@ -361,23 +361,35 @@ def motion_profile(path: Path, fps: int = 3) -> list[float]:
 
 
 def transcribe(path: Path, progress: Progress, language: str | None = None,
-               duration: float | None = None) -> dict:
-    """Transcription en ligne (Groq) si une clé est configurée, sinon locale."""
+               duration: float | None = None, noms: list[str] | None = None) -> dict:
+    """Transcription en ligne (Groq) si une clé est configurée, sinon locale,
+    puis analyse approfondie (noms corrigés, phrases fantômes, confiance par mot)."""
+    from . import analyse_sous_titres, corrections
+
+    tr = _transcribe(path, progress, language, duration, corrections.mots_cles(noms))
+    return analyse_sous_titres.analyser(tr, noms)
+
+
+def _transcribe(path: Path, progress: Progress, language: str | None = None,
+                duration: float | None = None, mots_cles: str = "") -> dict:
     from . import cloud_transcribe
 
+    prompt = f"Stream de jeu vidéo. {mots_cles}." if mots_cles else ""
     if cloud_transcribe.available():
         try:
-            return cloud_transcribe.transcribe(path, duration or probe_duration(path), progress, language)
+            return cloud_transcribe.transcribe(path, duration or probe_duration(path), progress,
+                                               language, prompt)
         except Exception as exc:
             print(f"[transcribe] Groq indisponible : {exc}")
             if os.getenv("TRANSCRIBE_FALLBACK", "0") != "1":
                 # Pas de repli silencieux : en local, ça peut prendre des heures sur un petit PC
                 raise RuntimeError(f"transcription en ligne (Groq) impossible : {exc}") from exc
             progress(0.0, f"Groq impossible ({exc}) → transcription locale (lente)…")
-    return transcribe_local(path, progress, language)
+    return transcribe_local(path, progress, language, prompt)
 
 
-def transcribe_local(path: Path, progress: Progress, language: str | None = None) -> dict:
+def transcribe_local(path: Path, progress: Progress, language: str | None = None,
+                     prompt: str = "") -> dict:
     """Transcription Whisper locale avec horodatage au mot près."""
     global _whisper
     from faster_whisper import WhisperModel
@@ -390,18 +402,28 @@ def transcribe_local(path: Path, progress: Progress, language: str | None = None
     seg_iter, info = _whisper.transcribe(
         load_audio(path), word_timestamps=True, vad_filter=True,
         beam_size=1, condition_on_previous_text=False,  # ~2x plus rapide, qualité quasi identique
-        language=language or None
+        language=language or None, initial_prompt=prompt or None,
     )
     segments = []
     for s in seg_iter:
+        mots: list[dict] = []
+        for w in s.words or []:
+            texte = w.word.strip()
+            if not texte:
+                continue
+            if mots and texte[0] in "'’-" and not w.word.startswith(" "):
+                # « C » + « 'est » → « C'est » ; « accroche » + « -toi » → « accroche-toi »
+                mots[-1]["word"] += texte
+                mots[-1]["end"] = round(w.end, 2)
+                mots[-1]["p"] = round(min(mots[-1]["p"], float(w.probability)), 3)
+                continue
+            mots.append({"start": round(w.start, 2), "end": round(w.end, 2), "word": texte,
+                         "p": round(float(w.probability), 3)})   # confiance du mot
         segments.append({
             "start": round(s.start, 2),
             "end": round(s.end, 2),
-            "text": s.text.strip(),
-            "words": [
-                {"start": round(w.start, 2), "end": round(w.end, 2), "word": w.word.strip()}
-                for w in (s.words or []) if w.word.strip()
-            ],
+            "text": " ".join(m["word"] for m in mots) or s.text.strip(),
+            "words": mots,
         })
         if info.duration:
             progress(min(s.end / info.duration, 1.0),
