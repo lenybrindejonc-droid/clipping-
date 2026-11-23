@@ -45,18 +45,27 @@ def _sans_accents(texte: str) -> str:
 
 def sujet(texte: str) -> tuple | None:
     """Le sujet le plus présent dans le texte du clip, ou None."""
-    meilleur, compte = None, 0
+    # Le clip commence sur le moment fort : le sujet cité le plus tôt est le bon
+    # (« oh le crash… je suis mort de rire » parle d'un crash, pas d'une mort)
+    meilleur, position = None, None
     for s in SUJETS:
-        n = len(re.findall(s[1], texte, re.I))
-        if n > compte:
-            meilleur, compte = s, n
+        m = re.search(s[1], texte, re.I)
+        if m and (position is None or m.start() < position):
+            meilleur, position = s, m.start()
     return meilleur
 
 
 def _citation(texte: str) -> str:
     """4 à 7 mots réellement dits, pris au début du clip (là où est le moment fort)."""
     mots = [m for m in re.sub(r"[«»\"]", "", texte).split() if m]
-    return " ".join(mots[:7]) if len(mots) >= 4 else ""
+    if len(mots) < 4:
+        return ""
+    garde = []
+    for m in mots[:7]:
+        garde.append(m)
+        if len(garde) >= 4 and m.endswith((".", "!", "?")):
+            break           # on s'arrête en fin de phrase plutôt qu'au milieu
+    return " ".join(garde).rstrip(".,")
 
 
 def accroche(texte: str, streamer: str = "", jeu: str = "", proposees: list[str] | None = None) -> str:

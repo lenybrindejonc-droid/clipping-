@@ -431,15 +431,24 @@ def transcribe_local(path: Path, progress: Progress, language: str | None = None
         for s in seg_iter:
             if s.start >= MORCEAU and k + 1 < n:
                 break                       # la seconde de recouvrement appartient au suivant
+            mots: list[dict] = []
+            for w in s.words or []:
+                texte = w.word.strip()
+                if not texte:
+                    continue
+                if mots and texte[0] in "'’-" and not w.word.startswith(" "):
+                    # « C » + « 'est » → « C'est » ; « accroche » + « -toi » → « accroche-toi »
+                    mots[-1]["word"] += texte
+                    mots[-1]["end"] = round(w.end + debut, 2)
+                    mots[-1]["p"] = round(min(mots[-1]["p"], float(w.probability)), 3)
+                    continue
+                mots.append({"start": round(w.start + debut, 2), "end": round(w.end + debut, 2),
+                             "word": texte, "p": round(float(w.probability), 3)})
             segments.append({
                 "start": round(s.start + debut, 2),
                 "end": round(s.end + debut, 2),
-                "text": s.text.strip(),
-                "words": [
-                    {"start": round(w.start + debut, 2), "end": round(w.end + debut, 2),
-                     "word": w.word.strip(), "p": round(float(w.probability), 3)}
-                    for w in (s.words or []) if w.word.strip()
-                ],
+                "text": " ".join(m["word"] for m in mots) or s.text.strip(),
+                "words": mots,
             })
             progress(min((debut + s.end) / duree, 1.0),
                      f"Transcription sur la machine… (morceau {k + 1}/{n})")

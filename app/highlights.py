@@ -354,6 +354,7 @@ DUREE_MAX_ABSOLUE = 30.0     # au-delà, les gens décrochent avant la fin
 TRANCHE = 600.0              # au plus 1 clip par tranche de 10 minutes de la source
 ECART_MIN = 60.0             # et jamais deux clips à moins d'une minute l'un de l'autre
 AVANCE_PIC = 1.2             # le clip démarre au plus 1,2 s avant le moment fort
+SILENCE_FIN = 2.5            # un blanc plus long après le moment fort = l'action est finie
 
 # Début de phrase qui suppose qu'on a entendu ce qui précède
 AMORCE = re.compile(
@@ -423,12 +424,24 @@ def demarrer_sur_le_pic(clip: dict, segments: list[dict], duration: float,
         mots = _mots(segments, start, start + 4)
         if len(mots) > n:
             start = mots[n]["start"]
-    # fin : on garde celle choisie si la durée est bonne, sinon on recale sur une fin de mot
+    # fin : 1 à 2 s après la réaction, pas 20 s plus tard. Le premier vrai silence
+    # (plus de SILENCE_FIN s sans parole) après le moment fort marque la fin de l'action.
+    mots_clip = _mots(segments, start, end)
+    apres = (pic if pic is not None and pic >= start else start) + 2.0
+    coupe = False
+    for a, b in zip(mots_clip, mots_clip[1:]):
+        if a["end"] >= apres and b["start"] - a["end"] >= SILENCE_FIN and a["end"] - start >= 3.0:
+            end, coupe = min(end, a["end"] + 1.0), True
+            break
     fins = [w["end"] for s in segments for w in s.get("words", []) if start < w["end"] <= duration]
     if end - start > max_d:
         ok = [f for f in fins if f - start <= max_d]
         end = max(ok) if ok else start + max_d
-    if end - start < min_d:
+    if end - start < min_d and coupe:
+        # trop court : on garde quelques secondes de la scène (la réaction), sans
+        # aller chercher la phrase suivante qui parle d'autre chose
+        end = min(duration, start + min_d)
+    elif end - start < min_d:
         ok = [f for f in fins if min_d <= f - start <= max_d]
         end = min(ok) if ok else min(duration, start + min_d)
     return {**clip, "start": round(max(0.0, start - 0.1), 2), "end": round(min(duration, end + 0.3), 2),

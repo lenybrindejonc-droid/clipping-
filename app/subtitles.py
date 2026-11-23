@@ -14,9 +14,9 @@ DELAY = float(os.getenv("SUBTITLE_DELAY", "0.08"))
 HOLD = 0.35      # le dernier mot d'une phrase reste un peu après avoir été prononcé
 MOTS_MIN, MOTS_MAX = 2, 4   # 2 à 4 mots à l'écran à la fois
 # Confiance de la transcription (0 à 1). Sous ces seuils, mieux vaut rien qu'un texte absurde.
-SEUIL_GROUPE = float(os.getenv("SEUIL_SOUS_TITRES", "0.5"))   # un groupe de mots
+SEUIL_GROUPE = float(os.getenv("SEUIL_SOUS_TITRES", "0.6"))   # un groupe de mots
 SEUIL_CLIP = float(os.getenv("SEUIL_SOUS_TITRES_CLIP", "0.6"))  # le clip entier
-SEUIL_MOT = float(os.getenv("SEUIL_SOUS_TITRES_MOT", "0.35"))   # un mot seul
+SEUIL_MOT = float(os.getenv("SEUIL_SOUS_TITRES_MOT", "0.5"))    # un mot seul
 
 
 def confiance(words: list[dict], start: float, end: float) -> float | None:

@@ -326,7 +326,10 @@ def run_job(job_id: str) -> None:
             # Accroche de 4 à 7 mots qui dit ce qui se passe, affichée dès la 1re image
             m["hook"] = textes.accroche(
                 _clip_text(words, m["start"], m["end"]), req.get("streamer", ""), req.get("jeu", ""),
-                [m.get("hook", "")] + [h.get("texte", "") for h in m.get("hooks") or []]) or m.get("hook", "")
+                # les propositions de Claude ; en mode sans IA, « hook » n'est que le début brut
+                # du passage, donc on écrit l'accroche à partir de ce qui se passe
+                ([m.get("hook", "")] + [h.get("texte", "") for h in m.get("hooks") or []])
+                if engine == "claude" else []) or m.get("hook", "")
             zones = pipeline.render_clip(
                 info["path"], work / name, m["start"], m["end"], words,
                 layout=req["layout"], subtitles=_sous_titres_ok(req, conf),
@@ -503,6 +506,10 @@ def rerender_clip(job_id: str, n: int, edit: dict) -> None:
         clip = jobs[job_id]["clips"][n]
         rapport = controle.controler(clip, work / clip["file"], req)
         _set_clip(job_id, n, rapport=rapport, mis_de_cote=bool(rapport["echecs"]))
+        tous = jobs[job_id]["clips"]
+        cote = sum(bool(c.get("mis_de_cote")) for c in tous)
+        _update(job_id, message=f"{len(tous) - cote} shorts prêts"
+                                + (f", {cote} mis de côté (voir leur rapport)" if cote else " !"))
     except Exception as exc:
         traceback.print_exc()
         _set_clip(job_id, n, rendering=None, error=pipeline._strip(str(exc).strip().splitlines()[-1]
