@@ -23,7 +23,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Redirect
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, ValidationError
 
-from . import lessons, pipeline, presets, textes
+from . import controle, lessons, pipeline, presets, textes
 from .highlights import find_moments
 from .subtitles import SEUIL_CLIP, confiance
 
@@ -295,7 +295,7 @@ def run_job(job_id: str) -> None:
         (work / "profils.json").write_text(json.dumps({"energie": energie, "mouvement": mouvement}))
 
         _progress(job_id, "analyze")(0.3, "L'IA cherche les moments les plus viraux…")
-        moments, engine, note = find_moments(
+        moments, engine, note, ecartes = find_moments(
             tr["segments"], info["title"], info["duration"],
             req["num_clips"], req["min_duration"], req["max_duration"], energie, mouvement,
             req.get("content_type", "auto"), req.get("rules", ""),
@@ -311,7 +311,8 @@ def run_job(job_id: str) -> None:
         t0 = _chrono("analyse IA", t0)
         if not moments:
             raise RuntimeError("Aucun moment exploitable trouvé (vidéo sans parole ?).")
-        _update(job_id, engine=engine, engine_note=note)
+        _update(job_id, engine=engine, engine_note=note,
+                ecartes=[{"start": c["start"], "end": c["end"], "raison": c["rejet"]} for c in ecartes])
 
         reglages = presets.get(req.get("content_type", "auto"))
         words = [w for s in tr["segments"] for w in s["words"]]
@@ -344,14 +345,23 @@ def run_job(job_id: str) -> None:
                           "file": name, "thumb": name.replace(".mp4", ".jpg"),
                           "duration": round(m["end"] - m["start"], 1), "layout": req["layout"],
                           "text": _clip_text(words, m["start"], m["end"]), "version": 1})
+            rapport = controle.controler(clips[-1], work / name, req)
+            clips[-1] |= {"rapport": rapport, "mis_de_cote": bool(rapport["echecs"])}
             _update(job_id, clips=clips)
+            if clips[-1]["mis_de_cote"]:
+                print(f"[contrôle] clip {i} mis de côté : {rapport['echecs']}", flush=True)
+                t0 = _chrono(f"montage clip {i}", t0)
+                continue
             try:
                 garder_automatiquement(job, clips[-1])
             except Exception as exc:
                 print(f"[bibliothèque] clip non gardé ({exc})", flush=True)
             t0 = _chrono(f"montage clip {i}", t0)
 
-        _update(job_id, status="done", progress=100, message=f"{len(clips)} shorts prêts !")
+        bons = sum(not c["mis_de_cote"] for c in clips)
+        cote = len(clips) - bons
+        _update(job_id, status="done", progress=100,
+                message=f"{bons} shorts prêts" + (f", {cote} mis de côté (voir leur rapport)" if cote else " !"))
         ok = True
     except Exception as exc:
         traceback.print_exc()
@@ -490,6 +500,9 @@ def rerender_clip(job_id: str, n: int, edit: dict) -> None:
                   hook_on_video=edit["hook"].strip(), layout=edit["layout"],
                   text=_clip_text(words, start, end),
                   version=clip.get("version", 1) + 1, rendering=None, error=None)
+        clip = jobs[job_id]["clips"][n]
+        rapport = controle.controler(clip, work / clip["file"], req)
+        _set_clip(job_id, n, rapport=rapport, mis_de_cote=bool(rapport["echecs"]))
     except Exception as exc:
         traceback.print_exc()
         _set_clip(job_id, n, rendering=None, error=pipeline._strip(str(exc).strip().splitlines()[-1]
@@ -970,9 +983,14 @@ def bibliotheque_zip(a_publier: bool = True):
     return FileResponse(archive, filename="bibliotheque.zip", media_type="application/zip")
 
 
-def _fiche_textes(job: dict) -> str:
+def _fiche_textes(job: dict, tous: list[dict] | None = None) -> str:
     """Toutes les accroches et légendes dans un fichier texte : elles seraient perdues sinon."""
     lignes = [f"# {job.get('title') or 'Projet'}", ""]
+    cote = [c for c in tous or [] if c.get("mis_de_cote")]
+    if cote:
+        lignes += ["Mis de côté par le contrôle (non exportés) :"]
+        lignes += [f"  - {c.get('file')} — {' ; '.join(c['rapport']['echecs'])}" for c in cote]
+        lignes.append("")
     for i, c in enumerate(job["clips"], 1):
         lignes += [f"## Clip {i} — {c.get('title', '')}",
                    f"Durée : {c.get('duration')} s · score {c.get('virality_score')}/100"
@@ -981,7 +999,10 @@ def _fiche_textes(job: dict) -> str:
                    f"Fichier : {c.get('file')}",
                    f"Source : {c.get('projet') or job.get('title') or '?'}"
                    + (f" · à publier le {c['publier_le']} (1 clip par source et par jour)"
-                      if c.get("publier_le") else ""), ""]
+                      if c.get("publier_le") else "")]
+        if c.get("rapport"):
+            lignes += ["Rapport : " + " | ".join(controle.texte(c["rapport"]))]
+        lignes.append("")
         accroches = c.get("hooks") or ([{"texte": c["hook"], "pourquoi": ""}] if c.get("hook") else [])
         if accroches:
             lignes.append("Accroches proposées :")
@@ -1009,17 +1030,20 @@ def telecharger_tout(job_id: str):
     job = jobs.get(job_id)
     if not job:
         raise HTTPException(404, "Projet introuvable.")
-    fichiers = [(JOBS / job_id / c["file"]) for c in job["clips"]]
+    # seuls les clips qui ont passé le contrôle partent ; les autres restent sur le site
+    bons = [c for c in job["clips"] if not c.get("mis_de_cote")]
+    fichiers = [(JOBS / job_id / c["file"]) for c in bons]
     fichiers = [f for f in fichiers if f.exists()]
     if not fichiers:
-        raise HTTPException(404, "Aucun clip disponible : ils ont été effacés par le serveur.")
+        raise HTTPException(404, "Aucun clip à exporter : ils ont été effacés par le serveur, "
+                                 "ou tous mis de côté par le contrôle (voir leur rapport).")
 
     nom = re.sub(r"[^\w -]", "", (job.get("title") or "clips"))[:50].strip() or "clips"
     archive = JOBS / job_id / "tous_les_clips.zip"
     with zipfile.ZipFile(archive, "w", zipfile.ZIP_STORED) as z:   # vidéos déjà compressées
         for f in fichiers:
             z.write(f, f.name)
-        z.writestr("textes.md", _fiche_textes(job))
+        z.writestr("textes.md", _fiche_textes({**job, "clips": bons}, job["clips"]))
     return FileResponse(archive, filename=f"{nom}.zip", media_type="application/zip")
 
 

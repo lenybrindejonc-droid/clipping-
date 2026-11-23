@@ -481,7 +481,7 @@ def find_moments(segments, title, duration, n=8, min_d=20, max_d=60,
                  content_type: str = "auto", rules: str = "",
                  streamer: str = "", jeu: str = "", mention: str = "") -> tuple[list[dict], str, str]:
     if not segments:
-        return [], "aucune parole détectée", ""
+        return [], "aucune parole détectée", "", []
     annotate_energy(segments, energy or [])
     annotate_motion(segments, motion or [])
     max_d = min(max_d, DUREE_MAX_ABSOLUE)
@@ -502,7 +502,7 @@ def find_moments(segments, title, duration, n=8, min_d=20, max_d=60,
     gardes, ecartes = appliquer_regles(clips, segments, duration, energy, motion, min_d, max_d)
     for c in ecartes:
         print(f"[highlights] écarté {c['start']:.0f}-{c['end']:.0f} s : {c['rejet']}", flush=True)
-    return gardes[:n], engine, note
+    return gardes[:n], engine, note, ecartes
 
 
 def _explain(exc: Exception) -> str:

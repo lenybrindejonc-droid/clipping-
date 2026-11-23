@@ -230,6 +230,20 @@ function render(job) {
   note.hidden = !job.engine_note;
   note.textContent = job.engine_note ? `⚠️ Claude n'a pas été utilisé : ${job.engine_note}. Les moments ont été choisis par une méthode basique, bien moins bonne.` : "";
 
+  // Moments repérés mais écartés par les règles (contexte manquant, trop proches…)
+  const ecartes = job.ecartes || [];
+  $("job-ecartes").hidden = !ecartes.length;
+  if (ecartes.length) {
+    $("job-ecartes").querySelector("summary").textContent =
+      `${ecartes.length} moment(s) écarté(s) par les règles — voir pourquoi`;
+    $("job-ecartes-list").innerHTML = "";
+    ecartes.forEach((e) => {
+      const li = document.createElement("li");
+      li.textContent = `${fmt(e.start)} → ${fmt(e.end)} : ${e.raison}`;
+      $("job-ecartes-list").appendChild(li);
+    });
+  }
+
   const cancel = $("cancel-job");
   cancel.hidden = job.status !== "queued";
   cancel.onclick = async () => {
@@ -269,6 +283,32 @@ function buildCard(job, clip, i) {
   q(".title").textContent = clip.title;
   q(".reason").textContent = clip.reason;
   if (clip.kind) { q(".kind").hidden = false; q(".kind").textContent = clip.kind; }
+  // --- Rapport de contrôle
+  const rapport = clip.rapport;
+  if (rapport) {
+    const conf = rapport.confiance_sous_titres;
+    const lignes = [
+      `Durée ${rapport.duree} s · score ${rapport.score ?? "?"}/100`,
+      `Sous-titres ${rapport.sous_titres}` + (conf != null ? ` (confiance ${Math.round(conf * 100)} %)` : ""),
+      ...rapport.echecs.map((e) => `⛔ ${e}`),
+      ...rapport.avertissements.map((a) => `⚠️ ${a}`),
+    ];
+    q(".rapport").hidden = false;
+    q(".rapport").querySelector("summary").textContent = rapport.echecs.length
+      ? "📋 Rapport : échec" : rapport.avertissements.length
+        ? `📋 Rapport : ${rapport.avertissements.length} point(s) à vérifier` : "📋 Rapport : tout est bon";
+    lignes.forEach((l) => {
+      const li = document.createElement("li");
+      li.textContent = l;
+      q(".rapport-list").appendChild(li);
+    });
+  }
+  if (clip.mis_de_cote) {
+    q(".cote").hidden = false;
+    q(".cote").textContent = "⛔ Mis de côté : pas exporté ni gardé dans la bibliothèque. "
+      + "Corrige-le avec ✏️ Modifier (le contrôle sera refait).";
+    node.classList.add("de-cote");
+  }
   if (clip.spoiler) q(".spoiler").hidden = false;
   // --- Légendes par plateforme
   const legendes = clip.captions || {};
@@ -289,6 +329,7 @@ function buildCard(job, clip, i) {
 
   const dl = q(".dl");
   dl.href = src;
+  if (clip.mis_de_cote) dl.textContent = "Télécharger quand même";
   dl.download = `${(clip.title || "clip").replace(/[^\p{L}\p{N} _-]/gu, "").slice(0, 50)}.mp4`;
   q(".copy").addEventListener("click", async (e) => {
     await navigator.clipboard.writeText(q(".caption").value);
