@@ -14,18 +14,15 @@ Chaîne de traitement (`app/`) :
 | Étape | Fichier | Détail |
 |---|---|---|
 | Téléchargement | `pipeline.py` | yt-dlp dans un processus séparé, arrêté au-delà de 20 min |
-| Transcription | `pipeline.py` → `transcribe_local` | faster-whisper `small`, français, morceaux de 10 min, confiance par mot (`p`) ; `TRANSCRIPTION=groq` pour Groq |
-| Noms | `corrections.py` + `corrections.json` | Michou, Gotaga, GTA 6… soufflés à Whisper puis corrigés (+ streamer et jeu saisis) |
+| Transcription | `cloud_transcribe.py` | Groq (gratuit, rapide) ; repli Whisper local, très lent. Confiance `p` par mot (Groq : par phrase) |
+| Analyse des sous-titres | `analyse_sous_titres.py` + `corrections.json` | noms corrigés (Michou, GTA 6… + streamer/jeu), phrases fantômes et boucles retirées |
 | Niveau sonore | `pipeline.py` → `energy_profile` | rires, cris : note E0–E9 par passage, donnée à l'IA |
 | Action à l'image | `pipeline.py` → `motion_profile` | crashs, poursuites : note V0–V9, donnée à l'IA |
 | Zoom | `pipeline.py` → `_zoom_filter` | zoompan sur le pic son+image, avant les sous-titres |
-| Choix des moments | `highlights.py` | Claude si clé, sinon méthode gratuite ; puis `appliquer_regles` : début ≤ 1,2 s avant le pic, 10–25 s (30 max), fin au 1er silence, rejet des renvois au contexte, 1 clip par tranche de 10 min |
+| Choix des moments | `highlights.py` | Claude ; consignes de `presets.py` ; repli heuristique sans clé |
 | Spécialisation | `presets.py` | 7 types : critères, durées, cadrage, style de sous-titres |
 | Cadrage 9:16 | `reframe.py` | facecam auto OU coin indiqué par l'utilisateur → écran partagé ; sinon suivi du visage ou fond flou |
 | Sous-titres | `subtitles.py` | ASS, 2–4 mots, mot actif en jaune ; mot < 50 % ou groupe < 60 % masqué, clip < 60 % = pas de sous-titres |
-| Texte source | `texte_source.py` | OpenCV : zones de texte stables (alertes, sous-titres d'origine) floutées, jamais la facecam |
-| Accroche, titre, hashtags | `textes.py` | sans IA : sujet repéré (police, crash…), accroche 4–7 mots dès la 1re image, 3–5 hashtags ciblés, #drole/#yt/#creator/#fyp interdits |
-| Contrôle | `controle.py` | rapport par clip ; échec (durée, score < 50, pas d'accroche, fichier) = mis de côté, hors zip et bibliothèque |
 | Interface | `static/` | envoi par morceaux, éditeur de clip, notation, 3 accroches, légendes par plateforme |
 | Bibliothèque | `main.py` → `garder_automatiquement` | tout clip monté est gardé 30 jours (lien matériel : aucun espace en plus) |
 
@@ -63,14 +60,16 @@ depuis le Space : le jeton YouTube ne doit pas être sur un serveur public).
   redémarrages, contrairement à ceux envoyés depuis l'interface. Marges transparentes rognées,
   70 % de la largeur, 280 px au-dessus du bas, sous les sous-titres.
 
-- **24/11 : 6 améliorations** après des vidéos à 156–868 vues (départ à 1–2 s, sous-titres
-  faux « DU QUI JET », texte source superposé, titres vagues, 3 clips d'une source le même
-  jour). Testées de bout en bout sur une vidéo de 20 min à voix française de synthèse
-  (piper) : voir le commit « Corrections trouvées en testant ». **Pas encore testé sur un
-  vrai stream** (bruit du jeu, vraie facecam, HUD de GTA possiblement flouté).
-  Réglages fins dans `.env` : `SEUIL_SOUS_TITRES_MOT/_GROUPE/_CLIP`, `SCORE_MIN`,
-  `WHISPER_MODEL`, `TRANSCRIPTION`. Claude reste utilisé si `ANTHROPIC_API_KEY` existe
-  (payant) : l'enlever pour un fonctionnement 100 % gratuit.
+- **24/11 : retour à l'ancien site + analyse des sous-titres seulement** (à sa demande :
+  « il fallait juste ajouter une analyse des sous-titres plus approfondie »). J'avais fait
+  6 améliorations (moments recalés sur le pic, 1 clip / 10 min, floutage du texte source,
+  accroches/titres/hashtags sans IA, zooms multiples, réaction, rapport et mise de côté) :
+  annulées par le commit « Retour au site d'avant », **récupérables** (commits e2f8035 à
+  5b74eed). Ne pas les remettre sans qu'il le demande. Leçon : faire exactement ce qui est
+  demandé, et demander avant d'élargir.
+  Réglages sous-titres dans `.env` : `SEUIL_SOUS_TITRES_MOT` (0.5), `SEUIL_SOUS_TITRES` (0.6),
+  `SEUIL_SOUS_TITRES_CLIP` (0.6). Testé sur une vidéo de 20 min à voix de synthèse (Whisper
+  local) ; **le calcul de confiance Groq n'a pas pu être testé** (Groq inaccessible ici).
 
 ## Pièges rencontrés (ne pas refaire le diagnostic)
 
@@ -134,8 +133,8 @@ depuis le Space : le jeton YouTube ne doit pas être sur un serveur public).
 
 ## Clés et réglages (`.env`, jamais dans git)
 
-`ANTHROPIC_API_KEY` (facultatif et payant, ~5–10 centimes par vidéo) ·
-`GROQ_API_KEY` (seulement avec `TRANSCRIPTION=groq`) · `APP_PASSWORD` · `WHISPER_MODEL` ·
+`ANTHROPIC_API_KEY` (choix des moments, ~5–10 centimes par vidéo) ·
+`GROQ_API_KEY` (transcription, gratuit) · `APP_PASSWORD` · `WHISPER_MODEL` ·
 `CLAUDE_MODEL` · `QUALITE` · `MAX_UPLOAD_GB`.
 
 ## Règles de travail sur ce projet
