@@ -88,6 +88,11 @@ def transcribe(path: Path, duration: float, progress, language: str | None = Non
                 if idx >= 0:
                     buckets[idx].append(w)
             for s, ws in zip(segs, buckets):
+                # Groq ne note pas chaque mot : on prend la confiance de la phrase
+                import math
+                p = math.exp(min(0.0, float(s.get("avg_logprob", 0.0))))
+                p *= 1.0 - min(1.0, float(s.get("no_speech_prob", 0.0)))
+                ws = [{**w, "p": round(p, 3)} for w in ws]
                 segments.append({
                     "start": round(s["start"] + offset, 2), "end": round(s["end"] + offset, 2),
                     "text": s["text"].strip(), "words": ws,

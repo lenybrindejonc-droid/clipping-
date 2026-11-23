@@ -17,7 +17,7 @@ from .subtitles import write_ass
 
 Progress = Callable[[float, str], None]
 
-WHISPER_MODEL = os.getenv("WHISPER_MODEL", "base")
+WHISPER_MODEL = os.getenv("WHISPER_MODEL", "small")   # base se trompe trop en français
 OUT_W, OUT_H = 1080, 1920
 # Petits processeurs (≤ 2 cœurs) : encodage plus rapide, fichier un peu plus gros
 X264_PRESET = os.getenv("X264_PRESET") or ("superfast" if (os.cpu_count() or 4) <= 2 else "veryfast")
@@ -361,24 +361,45 @@ def motion_profile(path: Path, fps: int = 3) -> list[float]:
 
 
 def transcribe(path: Path, progress: Progress, language: str | None = None,
-               duration: float | None = None) -> dict:
-    """Transcription en ligne (Groq) si une clé est configurée, sinon locale."""
-    from . import cloud_transcribe
+               duration: float | None = None, noms: list[str] | None = None) -> dict:
+    """Transcription avec horodatage et note de confiance pour chaque mot.
 
-    if cloud_transcribe.available():
+    Par défaut : faster-whisper sur la machine (gratuit, sans compte). TRANSCRIPTION=groq
+    dans .env repasse par Groq (gratuit aussi, plus rapide, mais c'est un service en ligne).
+    Les noms mal entendus sont ensuite corrigés (corrections.json + streamer + jeu).
+    """
+    from . import cloud_transcribe, corrections
+
+    tr = None
+    if os.getenv("TRANSCRIPTION", "local").lower() == "groq" and cloud_transcribe.available():
         try:
-            return cloud_transcribe.transcribe(path, duration or probe_duration(path), progress, language)
+            tr = cloud_transcribe.transcribe(path, duration or probe_duration(path), progress, language)
         except Exception as exc:
-            print(f"[transcribe] Groq indisponible : {exc}")
-            if os.getenv("TRANSCRIBE_FALLBACK", "0") != "1":
-                # Pas de repli silencieux : en local, ça peut prendre des heures sur un petit PC
-                raise RuntimeError(f"transcription en ligne (Groq) impossible : {exc}") from exc
-            progress(0.0, f"Groq impossible ({exc}) → transcription locale (lente)…")
-    return transcribe_local(path, progress, language)
+            print(f"[transcribe] Groq indisponible : {exc}", flush=True)
+            progress(0.0, f"Groq impossible ({exc}) → transcription sur la machine…")
+    if tr is None:
+        tr = transcribe_local(path, progress, language, duration, corrections.mots_cles(noms))
+    return corrections.corriger_transcription(tr, noms)
 
 
-def transcribe_local(path: Path, progress: Progress, language: str | None = None) -> dict:
-    """Transcription Whisper locale avec horodatage au mot près."""
+MORCEAU = int(os.getenv("TRANSCRIPTION_MORCEAU", "600"))   # 10 min par morceau
+
+
+def _audio_morceau(path: Path, debut: float, duree: float):
+    """Décode seulement [debut, debut + duree] : la mémoire reste petite même sur 3 h."""
+    import numpy as np
+
+    out = subprocess.run(
+        ["ffmpeg", "-nostdin", "-loglevel", "error", "-ss", f"{debut}", "-t", f"{duree}",
+         "-i", str(path), "-vn", "-ac", "1", "-ar", "16000", "-f", "s16le", "-"],
+        capture_output=True, check=True,
+    )
+    return np.frombuffer(out.stdout, np.int16).astype(np.float32) / 32768.0
+
+
+def transcribe_local(path: Path, progress: Progress, language: str | None = None,
+                     duration: float | None = None, mots_cles: str = "") -> dict:
+    """faster-whisper, morceau par morceau, avec la probabilité de chaque mot (« p »)."""
     global _whisper
     from faster_whisper import WhisperModel
 
@@ -386,27 +407,38 @@ def transcribe_local(path: Path, progress: Progress, language: str | None = None
         progress(0.0, f"Chargement du modèle Whisper ({WHISPER_MODEL})…")
         _whisper = WhisperModel(WHISPER_MODEL, device="auto", compute_type="int8",
                                 cpu_threads=os.cpu_count() or 4)
-
-    seg_iter, info = _whisper.transcribe(
-        load_audio(path), word_timestamps=True, vad_filter=True,
-        beam_size=1, condition_on_previous_text=False,  # ~2x plus rapide, qualité quasi identique
-        language=language or None
-    )
+    duree = duration or probe_duration(path)
+    n = max(1, int(-(-duree // MORCEAU)))
+    langue = language or None
     segments = []
-    for s in seg_iter:
-        segments.append({
-            "start": round(s.start, 2),
-            "end": round(s.end, 2),
-            "text": s.text.strip(),
-            "words": [
-                {"start": round(w.start, 2), "end": round(w.end, 2), "word": w.word.strip()}
-                for w in (s.words or []) if w.word.strip()
-            ],
-        })
-        if info.duration:
-            progress(min(s.end / info.duration, 1.0),
-                     "Transcription locale (lente — ajoute une clé GROQ_API_KEY pour aller 50x plus vite)…")
-    return {"language": info.language, "segments": segments}
+    for k in range(n):
+        debut = k * MORCEAU
+        audio = _audio_morceau(path, debut, MORCEAU + 1)
+        if not len(audio):
+            continue
+        seg_iter, info = _whisper.transcribe(
+            audio, word_timestamps=True, vad_filter=True, language=langue,
+            beam_size=1, condition_on_previous_text=False,  # ~2x plus rapide, évite les boucles
+            # les noms à reconnaître (Michou, GTA 6…) : Whisper les écrit alors correctement
+            initial_prompt=(f"Stream de jeu vidéo. {mots_cles}." if mots_cles else None),
+        )
+        langue = langue or info.language    # même langue pour tous les morceaux
+        for s in seg_iter:
+            if s.start >= MORCEAU and k + 1 < n:
+                break                       # la seconde de recouvrement appartient au suivant
+            segments.append({
+                "start": round(s.start + debut, 2),
+                "end": round(s.end + debut, 2),
+                "text": s.text.strip(),
+                "words": [
+                    {"start": round(w.start + debut, 2), "end": round(w.end + debut, 2),
+                     "word": w.word.strip(), "p": round(float(w.probability), 3)}
+                    for w in (s.words or []) if w.word.strip()
+                ],
+            })
+            progress(min((debut + s.end) / duree, 1.0),
+                     f"Transcription sur la machine… (morceau {k + 1}/{n})")
+    return {"language": langue, "segments": segments}
 
 
 OVERLAY_Y = {"haut": "60", "milieu": "(H-h)/2", "bas": "H-h-280"}
