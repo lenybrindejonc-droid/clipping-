@@ -50,8 +50,10 @@ depuis le Space : le jeton YouTube ne doit pas être sur un serveur public).
   Écartées : Fanvue (pub pour site adulte), Puffco (matériel de cannabis, risque de retrait).
   Le site a un choix « Campagne → Boeshi » qui remplit tout (anglais, 15 clips de 15–45 s,
   mention `twitch.tv/darealboeshi` ajoutée à chaque légende, consignes du brief).
-  **Overlay** obligatoire : lien pas encore reçu. Quand il l'envoie, le mettre dans
-  `static/overlays/` (survit aux redémarrages, contrairement à un envoi depuis l'interface).
+  **Overlay** obligatoire : `static/overlays/boeshi.png` (bandeau Twitch @darealboeshi, fourni
+  par la campagne), choisi automatiquement. Les overlays de `static/overlays/` survivent aux
+  redémarrages, contrairement à ceux envoyés depuis l'interface. Marges transparentes rognées,
+  70 % de la largeur, 280 px au-dessus du bas, sous les sous-titres.
 
 ## Pièges rencontrés (ne pas refaire le diagnostic)
 

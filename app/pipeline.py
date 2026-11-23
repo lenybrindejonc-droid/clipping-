@@ -409,7 +409,25 @@ def transcribe_local(path: Path, progress: Progress, language: str | None = None
     return {"language": info.language, "segments": segments}
 
 
-OVERLAY_Y = {"haut": "60", "milieu": "(H-h)/2", "bas": "H-h-290"}
+OVERLAY_Y = {"haut": "60", "milieu": "(H-h)/2", "bas": "H-h-280"}
+
+
+def _zone_visible(image: Path, w: int, h: int) -> tuple[int, int, int, int]:
+    """Rectangle (x, y, largeur, hauteur) de la partie non transparente de l'image."""
+    try:
+        import numpy as np
+
+        brut = subprocess.run(["ffmpeg", "-v", "error", "-i", str(image), "-frames:v", "1",
+                               "-f", "rawvideo", "-pix_fmt", "rgba", "-"],
+                              capture_output=True, check=True).stdout
+        alpha = np.frombuffer(brut, np.uint8).reshape(h, w, 4)[:, :, 3]
+        ys, xs = np.nonzero(alpha > 10)
+        if len(xs):
+            x0, x1, y0, y1 = int(xs.min()), int(xs.max()) + 1, int(ys.min()), int(ys.max()) + 1
+            return x0, y0, x1 - x0, y1 - y0
+    except Exception as exc:
+        print(f"[overlay] marges non rognées ({exc})", flush=True)
+    return 0, 0, w, h
 
 
 def _overlay_filter(image: Path, position: str) -> str:
@@ -421,10 +439,12 @@ def _overlay_filter(image: Path, position: str) -> str:
     w, h = probe_size(image)
     if abs(w / h - OUT_W / OUT_H) < 0.03:
         return f"[1:v]scale={OUT_W}:{OUT_H}[ov];[pre][ov]overlay=0:0:format=auto[v]"
-    f = min(1.0, OUT_W * 0.9 / w, OUT_H * 0.25 / h)
+    # Les marges transparentes autour d'un bandeau le décaleraient : on les rogne
+    x0, y0, w, h = _zone_visible(image, w, h)
+    f = min(1.0, OUT_W * 0.7 / w, OUT_H * 0.2 / h)
     tw, th = max(2, int(w * f) // 2 * 2), max(2, int(h * f) // 2 * 2)
     y = OVERLAY_Y.get(position, OVERLAY_Y["bas"])
-    return (f"[1:v]scale={tw}:{th}:flags=lanczos[ov];"
+    return (f"[1:v]crop={w}:{h}:{x0}:{y0},scale={tw}:{th}:flags=lanczos[ov];"
             f"[pre][ov]overlay=(W-w)/2:{y}:format=auto[v]")
 
 

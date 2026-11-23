@@ -628,10 +628,11 @@ $("overlay-file").addEventListener("change", async () => {
 const CAMPAGNES = {
   boeshi: {
     info: "Clips en anglais (public US/UK/CAN/AUS), lien Twitch ajouté à chaque légende. " +
-      "N'oublie pas de choisir l'overlay de la campagne ci-dessous.",
+      "Bandeau Twitch @darealboeshi incrusté en bas pendant tout le clip.",
     champs: {
       type: "gaming", streamer: "Boeshi", jeu: "GTA 6", lang: "en",
       num: 15, min: 15, max: 45, mention: "twitch.tv/darealboeshi",
+      overlay: "boeshi.png", "overlay-pos": "bas",
       rules: [
         "Campaign: Boeshi GTA 6 clipping. Goal: funny, high-retention clips that drive viewers to twitch.tv/darealboeshi.",
         "Only recent GTA 6 content from his Twitch VODs.",
