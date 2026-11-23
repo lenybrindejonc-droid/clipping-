@@ -169,9 +169,12 @@ depuis le Space : le jeton YouTube ne doit pas être sur un serveur public).
 
 ## Pistes non faites
 
-1. Suivi de la personne qui parle (podcasts à plusieurs).
-   (Rien de réutilisable trouvé sur GitHub ni pour les critères par type, ni pour l'écriture
-   des accroches : `presets.py` est maison.)
+1. ~~Suivi de la personne qui parle~~ : fait le 24/11, cadrage « Podcast : suivre la personne
+   qui parle » (`layout=parole`, `reframe.analyze_parole`). Visages 6 fois/s, mouvement du
+   bas du visage pendant que le son indique une voix, plan net de 1,5 s minimum. Testé sur un
+   faux podcast (2 photos, bouches animées) avec le détecteur de secours Haar ; **pas sur un
+   vrai podcast** (YuNet, le détecteur principal, est bloqué dans l'environnement de dev).
+   Il veut se lancer dans les **podcasts business et discussion** (compte TikTok à part).
 2. Musique de fond libre de droits, publication directe TikTok.
 2b. Suivi des gains : `gta6/suivi.csv` décrit par le skill `gta6-campagnes-et-gains`, pas encore
    créé (attendre qu'il publie ses premiers clips sous campagne).

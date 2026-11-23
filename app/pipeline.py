@@ -496,7 +496,10 @@ def render_clip(
 
     crop_w = int(src_h * OUT_W / OUT_H) // 2 * 2
     mode, data = "wide", None
-    if layout != "blur" and src_w / src_h > OUT_W / OUT_H:
+    if layout == "parole" and src_w / src_h > OUT_W / OUT_H:
+        # podcast à plusieurs : cadrage serré sur la personne qui parle
+        mode, data = reframe.analyze_parole(src, start, end, src_w, src_h, crop_w)
+    elif layout != "blur" and src_w / src_h > OUT_W / OUT_H:
         mode, data = reframe.analyze(src, start, end, src_w, src_h, crop_w,
                                      allow_facecam=layout in ("auto", "gaming"), coin=facecam)
         if mode == "wide" and layout in ("crop", "gaming"):

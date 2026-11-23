@@ -218,3 +218,152 @@ def _track(samples, src_w: int, crop_w: int) -> str | None:
         return body
 
     return f"if(lt(t,{keys[1][0]:.2f}),{keys[0][1]},{segment(1)})"
+
+
+# ------------------------------------------------- podcast : suivre la personne qui parle
+PAROLE_FPS = 6           # images analysées par seconde (assez pour voir une bouche bouger)
+PAROLE_FENETRE = 1.0     # on décide qui parle seconde par seconde
+PAROLE_PLAN_MIN = 1.5    # jamais deux changements de plan à moins de 1,5 s
+PAROLE_MARGE = 1.25      # le nouveau doit bouger 25 % de plus que l'actuel pour prendre la main
+
+
+def _audio_actif(src: Path, start: float, end: float, pas: float) -> list[bool]:
+    """Vrai quand quelqu'un parle (son au-dessus du bruit de fond), par tranche de `pas` s."""
+    import subprocess
+
+    import numpy as np
+
+    sr = 8000
+    brut = subprocess.run(["ffmpeg", "-nostdin", "-v", "error", "-ss", f"{start}", "-t", f"{end - start}",
+                           "-i", str(src), "-vn", "-ac", "1", "-ar", str(sr), "-f", "s16le", "-"],
+                          capture_output=True).stdout
+    a = np.frombuffer(brut, np.int16).astype(np.float32) / 32768
+    n = int(sr * pas)
+    if len(a) < n:
+        return []
+    rms = np.sqrt((a[: len(a) // n * n].reshape(-1, n) ** 2).mean(axis=1) + 1e-12)
+    db = 20 * np.log10(rms)
+    # 6 dB au-dessus du bruit de fond ; mais dans un podcast on parle presque tout le temps,
+    # donc le « fond » peut être la voix elle-même : une voix normale (> -40 dB) passe toujours
+    seuil = min(np.percentile(db, 20) + 6, -40)
+    return (db > seuil).tolist()
+
+
+def _personnes(detections: list[list[tuple]], src_w: int) -> list[float]:
+    """Regroupe les visages par position horizontale : une place = une personne."""
+    xs = sorted(f[0] for faces in detections for f in faces)
+    if not xs:
+        return []
+    groupes: list[list[float]] = [[xs[0]]]
+    for x in xs[1:]:
+        if x - groupes[-1][-1] > 0.12 * src_w:
+            groupes.append([])
+        groupes[-1].append(x)
+    n = len(detections)
+    # une personne doit être là au moins 30 % du temps (sinon : passant, reflet, photo)
+    return [_median(g) for g in groupes if len(g) >= 0.3 * n][:4]
+
+
+def analyze_parole(src: Path, start: float, end: float, src_w: int, src_h: int,
+                   crop_w: int) -> tuple[str, object]:
+    """Cadrage serré sur la personne qui parle, avec un changement de plan net quand
+    la parole passe à quelqu'un d'autre. Renvoie ("track", expression x(t)) ou ("wide", None).
+
+    Méthode légère, sans modèle en plus : on repère les visages 6 fois par seconde, on
+    mesure combien bouge le bas de chaque visage (la bouche) d'une image à l'autre, et
+    pendant que le son indique une voix, celui dont la bouche bouge le plus parle.
+    """
+    import cv2
+    import numpy as np
+
+    try:
+        detect = _get_detector()
+        cap = cv2.VideoCapture(str(src))
+        pas = 1.0 / PAROLE_FPS
+        images, detections = [], []
+        t = start
+        while t < end:
+            cap.set(cv2.CAP_PROP_POS_MSEC, t * 1000)
+            ok, frame = cap.read()
+            if not ok:
+                break
+            scale = DETECT_WIDTH / frame.shape[1]
+            small = cv2.resize(frame, None, fx=scale, fy=scale)
+            gris = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
+            faces = [(cx / scale, cy / scale, w / scale) for cx, cy, w in detect(small)]
+            if faces:
+                grand = max(f[2] for f in faces)
+                faces = [f for f in faces if f[2] >= 0.45 * grand]   # pas le public au fond
+            images.append((gris, scale))
+            detections.append(faces)
+            t += pas
+        cap.release()
+    except Exception as exc:
+        print(f"[reframe] suivi de la parole impossible ({exc})")
+        return "wide", None
+
+    places = _personnes(detections, src_w)
+    if not places:
+        return "wide", None
+    max_x = src_w - crop_w
+
+    def to_x(c: float) -> int:
+        return int(min(max(c - crop_w / 2, 0), max_x)) // 2 * 2
+
+    if len(places) == 1:                       # une seule personne : cadrage fixe sur elle
+        return "track", str(to_x(places[0]))
+
+    # Mouvement de la bouche de chaque personne, image par image
+    n = len(detections)
+    activite = np.full((len(places), n), np.nan)
+    precedent: dict[int, np.ndarray] = {}
+    for i, (faces, (gris, scale)) in enumerate(zip(detections, images)):
+        for cx, cy, w in faces:
+            p = int(np.argmin([abs(cx - x) for x in places]))
+            if abs(cx - places[p]) > 0.12 * src_w:
+                continue
+            # bas du visage : de la lèvre supérieure au menton
+            x0, x1 = int((cx - 0.3 * w) * scale), int((cx + 0.3 * w) * scale)
+            y0, y1 = int((cy + 0.15 * w) * scale), int((cy + 0.5 * w) * scale)
+            zone = gris[max(y0, 0):max(y1, 1), max(x0, 0):max(x1, 1)]
+            if zone.size < 20:
+                continue
+            zone = cv2.resize(zone, (32, 16)).astype(np.float32)
+            if p in precedent:
+                activite[p, i] = float(np.abs(zone - precedent[p]).mean())
+            precedent[p] = zone
+        for p in list(precedent):          # personne pas vue sur cette image : on oublie
+            if not any(abs(f[0] - places[p]) <= 0.12 * src_w for f in faces):
+                precedent.pop(p)
+
+    # Chaque personne a sa « bouche au repos » (barbe, lumière) : on la retire
+    for p in range(len(places)):
+        ligne = activite[p][~np.isnan(activite[p])]
+        if len(ligne):
+            activite[p] -= np.median(ligne)
+
+    voix = _audio_actif(src, start, end, pas)
+    par_fenetre = max(1, int(PAROLE_FENETRE * PAROLE_FPS))
+    actuel = int(np.nanargmax(np.nanmean(np.where(np.isnan(activite), -1, activite), axis=1)))
+    keys = [(0.0, to_x(places[actuel]))]
+    for k in range(0, n, par_fenetre):
+        bloc = activite[:, k:k + par_fenetre]
+        parle = voix[k:k + par_fenetre] if voix else [True]
+        if not any(parle) or np.isnan(bloc).all():
+            continue                        # silence ou personne visible : on garde le plan
+        score = np.nan_to_num(np.nanmean(np.where(np.isnan(bloc), np.nan, bloc), axis=1), nan=-1e9)
+        meilleur = int(np.argmax(score))
+        t = k / PAROLE_FPS
+        if (meilleur != actuel and score[meilleur] > 0
+                and score[meilleur] > PAROLE_MARGE * max(score[actuel], 0) + 0.3
+                and t - keys[-1][0] >= PAROLE_PLAN_MIN):
+            actuel = meilleur
+            keys.append((round(t, 2), to_x(places[actuel])))
+
+    if len(keys) == 1:
+        return "track", str(keys[0][1])
+    # changements de plan nets (pas de glissement) : c'est le montage classique d'un podcast
+    expr = str(keys[-1][1])
+    for (t0, x0), (t1, _) in reversed(list(zip(keys, keys[1:]))):
+        expr = f"if(lt(t,{t1:.2f}),{x0},{expr})"
+    return "track", expr

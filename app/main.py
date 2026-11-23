@@ -145,7 +145,7 @@ class JobRequest(BaseModel):
     num_clips: int = Field(5, ge=1, le=30)
     min_duration: int = Field(15, ge=5, le=120)
     max_duration: int = Field(40, ge=10, le=180)
-    layout: str = Field("auto", pattern="^(auto|crop|blur|gaming)$")
+    layout: str = Field("auto", pattern="^(auto|crop|blur|gaming|parole)$")
     content_type: str = Field("auto", pattern="^(auto|gaming|podcast|vlog|tuto|humour|sport)$")
     facecam: str = Field("auto", pattern="^(auto|hg|hd|bg|bd|aucune)$")
     rules: str = Field("", max_length=4000)   # règles d'une campagne de clipping
@@ -414,7 +414,7 @@ class ClipEdit(BaseModel):
     end: float = Field(gt=0)
     hook: str = Field("", max_length=120)
     text: str | None = Field(None, max_length=5000)
-    layout: str = Field("auto", pattern="^(auto|crop|blur|gaming)$")
+    layout: str = Field("auto", pattern="^(auto|crop|blur|gaming|parole)$")
     content_type: str = Field("auto", pattern="^(auto|gaming|podcast|vlog|tuto|humour|sport)$")
     facecam: str = Field("auto", pattern="^(auto|hg|hd|bg|bd|aucune)$")
     rules: str = Field("", max_length=4000)   # règles d'une campagne de clipping
