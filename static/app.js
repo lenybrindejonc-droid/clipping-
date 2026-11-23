@@ -20,6 +20,9 @@ function params() {
     streamer: $("streamer").value,
     jeu: $("jeu").value,
     rules: $("rules").value,
+    mention: $("mention").value,
+    overlay: $("overlay").value,
+    overlay_pos: $("overlay-pos").value,
     subtitles: $("subs").checked,
     show_hook: $("hook").checked,
     zoom: $("zoom").checked,
@@ -586,3 +589,75 @@ async function chargerBiblio() {
 }
 
 chargerBiblio();
+
+// --- Image à incruster (overlay exigé par certaines campagnes)
+async function chargerOverlays(choisir) {
+  try {
+    const noms = await (await fetch("/api/overlays")).json();
+    const sel = $("overlay");
+    const avant = choisir ?? sel.value;
+    sel.innerHTML = '<option value="">Aucune</option>';
+    noms.forEach((n) => sel.add(new Option(n, n)));
+    if (noms.includes(avant)) sel.value = avant;
+  } catch (e) { /* liste indisponible : on garde « Aucune » */ }
+}
+chargerOverlays();
+
+$("overlay-file").addEventListener("change", async () => {
+  const f = $("overlay-file").files[0];
+  if (!f) return;
+  const info = $("overlay-info");
+  info.hidden = false;
+  info.textContent = "Envoi de l'image…";
+  try {
+    const r = await fetch(`/api/overlays?nom=${encodeURIComponent(f.name)}`, { method: "POST", body: f });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.detail || "envoi refusé");
+    await chargerOverlays(d.nom);
+    info.textContent = d.plein_ecran
+      ? `✅ ${d.nom} (${d.largeur}×${d.hauteur}) : image au format vertical, posée sur tout l'écran.`
+      : `✅ ${d.nom} (${d.largeur}×${d.hauteur}) : posée au centre, à la position choisie.`;
+    info.textContent += " Elle sera effacée si le site redémarre : garde-la sur ton appareil.";
+  } catch (e) {
+    info.textContent = `❌ ${e.message}`;
+  }
+  $("overlay-file").value = "";
+});
+
+// --- Réglages tout faits par campagne
+const CAMPAGNES = {
+  boeshi: {
+    info: "Clips en anglais (public US/UK/CAN/AUS), lien Twitch ajouté à chaque légende. " +
+      "N'oublie pas de choisir l'overlay de la campagne ci-dessous.",
+    champs: {
+      type: "gaming", streamer: "Boeshi", jeu: "GTA 6", lang: "en",
+      num: 15, min: 15, max: 45, mention: "twitch.tv/darealboeshi",
+      rules: [
+        "Campaign: Boeshi GTA 6 clipping. Goal: funny, high-retention clips that drive viewers to twitch.tv/darealboeshi.",
+        "Only recent GTA 6 content from his Twitch VODs.",
+        "Every caption must tag his Twitch: twitch.tv/darealboeshi (e.g. 'Full stream at twitch.tv/darealboeshi', 'He really said this live 💀 Full stream at twitch.tv/darealboeshi').",
+        "Audience: 40%+ tier 1 (USA, UK, CAN, AUS) — write everything in natural American English.",
+        "Clip farm the whole VOD: pull every clippable moment, not just one or two highlights.",
+        "Top priority: jokes about how his voice sounds, his voice joke bits, and the mewing he does when focusing or scared.",
+        "Also good: hilarious reactions, insane police chases, unexpected encounters, chaotic gameplay.",
+        "Chad edits welcome: moments where he looks good on stream.",
+        "Meme captions welcome, Sam Sulek style relatable captions (e.g. 'me in class when it's show and tell day'). Get creative: build a story around the moment, in context or not.",
+        "Clips must be able to reach at least 0.8% engagement and stay live 30 days: nothing that risks removal.",
+        "A campaign overlay is added on screen for the whole clip (handled by the site).",
+      ].join("\n"),
+    },
+  },
+};
+
+$("campagne").addEventListener("change", () => {
+  const c = CAMPAGNES[$("campagne").value];
+  const info = $("campagne-info");
+  info.hidden = !c;
+  if (!c) return;
+  for (const [id, v] of Object.entries(c.champs)) {
+    $(id).value = v;
+    $(id).dispatchEvent(new Event("change"));
+  }
+  $("preset-info").hidden = true;   // ses chiffres seraient ceux du type, pas de la campagne
+  info.textContent = c.info;
+});

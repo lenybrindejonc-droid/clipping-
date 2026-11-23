@@ -78,7 +78,9 @@ Règles supplémentaires :
 - Classe du plus fort au plus faible et sois sévère dans les notes : réserve 85+ aux passages
   dont tu es certain, et n'hésite pas à descendre sous 50 un passage moyen.
 
-Le titre, le hook et la description sont dans la langue de la vidéo."""
+Le titre, les accroches, la description et les légendes sont dans la langue de la vidéo :
+si le streamer parle anglais, tout est en anglais (forme descriptive : « <streamer> <action>
+in <jeu> »), avec des tournures naturelles pour un public américain."""
 
 from . import presets
 
@@ -226,7 +228,7 @@ def _transcript_text(segments: list[dict]) -> str:
 
 
 def ask_claude(segments, title, n, min_d, max_d, content_type="auto", rules="",
-               streamer="", jeu="") -> list[dict]:
+               streamer="", jeu="", mention="") -> list[dict]:
     import anthropic
 
     client = anthropic.Anthropic()
@@ -248,12 +250,16 @@ def ask_claude(segments, title, n, min_d, max_d, content_type="auto", rules="",
     if rules.strip():
         systeme += (
             "\n\nRÈGLES DE LA CAMPAGNE — elles priment sur tout ce qui précède :\n"
-            + rules.strip()[:1500]
+            + rules.strip()[:4000]
             + "\n\nPour chaque clip, remplis « campaign_check » : une ligne par règle vérifiable "
               "(durée, hashtags obligatoires, mention de l'auteur, spoilers, musique tierce, "
               "plateforme autorisée). Verdict « ok », « probleme » ou « incertain ». "
               "Mets « incertain » dès que tu ne peux pas vérifier depuis la transcription, "
               "plutôt que de supposer que tout va bien.")
+    if mention.strip():
+        systeme += (f"\n\nMENTION OBLIGATOIRE : chaque légende (tiktok, youtube, reels, description) "
+                    f"doit contenir exactement « {mention.strip()} », intégrée naturellement "
+                    "(ex. « Full stream at … »), dans la langue de la vidéo.")
     prompt = (
         f"Titre de la vidéo : {title}\n"
         f"Trouve les {n} meilleurs moments pour des shorts de {min_d} à {max_d} secondes, "
@@ -341,7 +347,7 @@ def _snap(clips, segments, duration, min_d, max_d) -> list[dict]:
 def find_moments(segments, title, duration, n=8, min_d=20, max_d=60,
                  energy: list[float] | None = None, motion: list[float] | None = None,
                  content_type: str = "auto", rules: str = "",
-                 streamer: str = "", jeu: str = "") -> tuple[list[dict], str, str]:
+                 streamer: str = "", jeu: str = "", mention: str = "") -> tuple[list[dict], str, str]:
     if not segments:
         return [], "aucune parole détectée", ""
     annotate_energy(segments, energy or [])
@@ -350,7 +356,8 @@ def find_moments(segments, title, duration, n=8, min_d=20, max_d=60,
     try:
         if not (os.getenv("ANTHROPIC_API_KEY") or "").startswith("sk-ant-"):
             raise RuntimeError("aucune clé ANTHROPIC_API_KEY valide dans le fichier .env")
-        clips = ask_claude(segments, title, n, min_d, max_d, content_type, rules, streamer, jeu)
+        clips = ask_claude(segments, title, n, min_d, max_d, content_type, rules, streamer, jeu,
+                           mention)
     except Exception as exc:  # repli hors-ligne
         note = _explain(exc)
         print(f"[highlights] Claude indisponible ({note}), repli heuristique")

@@ -102,6 +102,41 @@ async def require_password(request: Request, call_next):
 
 
 YOUTUBE = re.compile(r"^https?://(www\.|m\.)?(youtube\.com|youtu\.be)/", re.I)
+TWITCH = re.compile(r"^https?://(www\.|m\.)?twitch\.tv/", re.I)
+
+# Images à poser sur les clips (exigées par certaines campagnes). Celles de static/overlays
+# font partie du site et survivent aux redémarrages ; celles envoyées depuis l'interface
+# vont dans DATA/overlays et sont effacées quand Hugging Face redémarre.
+OVERLAYS_SITE = ROOT / "static" / "overlays"
+OVERLAYS_ENVOYES = DATA / "overlays"
+OVERLAY_EXT = {".png", ".webp", ".jpg", ".jpeg"}
+NOM_OVERLAY = r"^[\w.-]{0,80}$"
+
+
+def _overlay_path(nom: str) -> Path | None:
+    if not nom:
+        return None
+    for d in (OVERLAYS_ENVOYES, OVERLAYS_SITE):
+        f = d / Path(nom).name
+        if f.suffix.lower() in OVERLAY_EXT and f.is_file():
+            return f
+    return None
+
+
+def _ajoute_mention(clip: dict, mention: str) -> dict:
+    """Garantit la mention obligatoire (ex. twitch.tv/darealboeshi) dans chaque légende."""
+    mention = mention.strip()
+    if not mention:
+        return clip
+    def avec(texte: str) -> str:
+        texte = (texte or "").rstrip()
+        if mention.lower() in texte.lower():
+            return texte
+        return f"{texte}\n\n{mention}" if texte else mention
+    caps = clip.get("captions") or {}
+    clip["captions"] = {k: avec(v) for k, v in caps.items()} if caps else caps
+    clip["description"] = avec(clip.get("description", ""))
+    return clip
 
 
 class JobRequest(BaseModel):
@@ -112,9 +147,12 @@ class JobRequest(BaseModel):
     layout: str = Field("auto", pattern="^(auto|crop|blur|gaming)$")
     content_type: str = Field("auto", pattern="^(auto|gaming|podcast|vlog|tuto|humour|sport)$")
     facecam: str = Field("auto", pattern="^(auto|hg|hd|bg|bd|aucune)$")
-    rules: str = Field("", max_length=1500)   # règles d'une campagne de clipping
+    rules: str = Field("", max_length=4000)   # règles d'une campagne de clipping
     streamer: str = Field("", max_length=60)  # nom à placer dans les accroches
     jeu: str = Field("", max_length=60)       # nom du jeu
+    mention: str = Field("", max_length=120)  # texte obligatoire dans chaque légende
+    overlay: str = Field("", pattern=NOM_OVERLAY)  # image de campagne posée sur tout le clip
+    overlay_pos: str = Field("bas", pattern="^(haut|milieu|bas)$")
     subtitles: bool = True
     show_hook: bool = False      # accroche incrustée sur la vidéo (sinon : texte à copier)
     zoom: bool = True            # zoom progressif sur le moment fort
@@ -222,6 +260,9 @@ def run_job(job_id: str) -> None:
     t0 = time.time()
     _update(job_id, status="download", progress=1, message="Démarrage du téléchargement…")
     try:
+        if req.get("overlay") and _overlay_path(req["overlay"]) is None:
+            raise RuntimeError(f"l'image « {req['overlay']} » n'est plus sur le serveur "
+                               "(effacée au redémarrage) : renvoie-la dans les réglages")
         if req.get("url"):
             info = pipeline.download(req["url"], work, _progress(job_id, "download"),
                                      req.get("high_quality", False))
@@ -257,8 +298,9 @@ def run_job(job_id: str) -> None:
             tr["segments"], info["title"], info["duration"],
             req["num_clips"], req["min_duration"], req["max_duration"], energie, mouvement,
             req.get("content_type", "auto"), req.get("rules", ""),
-            req.get("streamer", ""), req.get("jeu", ""),
+            req.get("streamer", ""), req.get("jeu", ""), req.get("mention", ""),
         )
+        moments = [_ajoute_mention(m, req.get("mention", "")) for m in moments]
         t0 = _chrono("analyse IA", t0)
         if not moments:
             raise RuntimeError("Aucun moment exploitable trouvé (vidéo sans parole ?).")
@@ -279,6 +321,8 @@ def run_job(job_id: str) -> None:
                 sub_style=reglages["sous_titres"], facecam=req.get("facecam", "auto"),
                 zoom_at=(_pic_du_clip(energie, mouvement, m["start"], m["end"])
                          if reglages.get("zoom") and req.get("zoom", True) else None),
+                overlay=_overlay_path(req.get("overlay", "")),
+                overlay_pos=req.get("overlay_pos", "bas"),
             )
             clips.append({**m, "hook_on_video": m.get("hook") if req.get("show_hook") else "",
                           "file": name, "thumb": name.replace(".mp4", ".jpg"),
@@ -364,7 +408,7 @@ class ClipEdit(BaseModel):
     layout: str = Field("auto", pattern="^(auto|crop|blur|gaming)$")
     content_type: str = Field("auto", pattern="^(auto|gaming|podcast|vlog|tuto|humour|sport)$")
     facecam: str = Field("auto", pattern="^(auto|hg|hd|bg|bd|aucune)$")
-    rules: str = Field("", max_length=1500)   # règles d'une campagne de clipping
+    rules: str = Field("", max_length=4000)   # règles d'une campagne de clipping
     streamer: str = Field("", max_length=60)  # nom à placer dans les accroches
     jeu: str = Field("", max_length=60)       # nom du jeu
 
@@ -407,6 +451,7 @@ def rerender_clip(job_id: str, n: int, edit: dict) -> None:
             src, work / clip["file"], start, end, words, layout=edit["layout"],
             subtitles=req["subtitles"], hook=edit["hook"].strip() or None,
             high_quality=req.get("high_quality", False), facecam=req.get("facecam", "auto"),
+            overlay=_overlay_path(req.get("overlay", "")), overlay_pos=req.get("overlay_pos", "bas"),
         )
         _set_clip(job_id, n, start=round(start, 2), end=round(end, 2), duration=round(end - start, 1),
                   hook_on_video=edit["hook"].strip(), layout=edit["layout"],
@@ -466,8 +511,10 @@ def _new_job(req: JobRequest, extra: dict | None = None) -> dict:
 
 @app.post("/api/jobs")
 def create_job(req: JobRequest):
-    if not req.url or not YOUTUBE.match(req.url.strip()):
-        raise HTTPException(400, "Colle un lien YouTube valide.")
+    if not req.url or not (YOUTUBE.match(req.url.strip()) or TWITCH.match(req.url.strip())):
+        raise HTTPException(400, "Colle un lien YouTube ou Twitch valide.")
+    if req.overlay and _overlay_path(req.overlay) is None:
+        raise HTTPException(400, "L'image à incruster n'est plus sur le serveur : renvoie-la.")
     job = _new_job(req, {"url": req.url.strip()})
     futures[job["id"]] = executor.submit(run_job, job["id"])
     return job
@@ -624,6 +671,34 @@ def finish_upload(upload_id: str):
         raise HTTPException(400, str(exc))
     futures[job["id"]] = executor.submit(run_job, job["id"])
     return job
+
+
+@app.get("/api/overlays")
+def lister_overlays():
+    noms = set()
+    for d in (OVERLAYS_SITE, OVERLAYS_ENVOYES):
+        if d.is_dir():
+            noms |= {f.name for f in d.iterdir() if f.suffix.lower() in OVERLAY_EXT}
+    return sorted(noms)
+
+
+@app.post("/api/overlays")
+async def envoyer_overlay(request: Request, nom: str):
+    nom = re.sub(r"[^\w.-]", "_", Path(nom).name)[:80]
+    if Path(nom).suffix.lower() not in OVERLAY_EXT:
+        raise HTTPException(400, "Envoie une image .png (transparente de préférence), .webp ou .jpg.")
+    contenu = await request.body()
+    if not contenu or len(contenu) > 15 * 1024 * 1024:
+        raise HTTPException(400, "Image vide ou trop lourde (15 Mo maximum).")
+    OVERLAYS_ENVOYES.mkdir(parents=True, exist_ok=True)
+    dest = OVERLAYS_ENVOYES / nom
+    dest.write_bytes(contenu)
+    try:
+        w, h = pipeline.probe_size(dest)
+    except Exception:
+        dest.unlink(missing_ok=True)
+        raise HTTPException(400, "Ce fichier n'est pas une image lisible.")
+    return {"nom": nom, "largeur": w, "hauteur": h, "plein_ecran": abs(w / h - 9 / 16) < 0.03}
 
 
 @app.get("/api/jobs")

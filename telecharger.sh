@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Télécharge une vidéo YouTube sur CET ordinateur, pour l'envoyer ensuite au site.
-# Usage : ./telecharger.sh "https://www.youtube.com/watch?v=..."
+# Usage : ./telecharger.sh "https://www.youtube.com/watch?v=..."  (ou un lien twitch.tv/videos/...)
 set -e
 cd "$(dirname "$0")"
 if [ -z "${1:-}" ]; then echo 'Usage : ./telecharger.sh "https://www.youtube.com/watch?v=..."'; exit 1; fi
@@ -65,6 +65,12 @@ for client in $CLIENTS; do
 done
 
 echo
+case "$1" in *twitch.tv*)
+  echo "❌ Twitch a refusé le téléchargement."
+  echo "   → Vérifie que le lien s'ouvre bien (VOD pas supprimée, pas réservée aux abonnés)."
+  echo "   → Les VOD Twitch s'effacent après quelques jours : prends les plus récentes."
+  exit 1;;
+esac
 echo "❌ YouTube a refusé le téléchargement avec toutes les méthodes."
 if ls ~/videos/.encours/* >/dev/null 2>&1; then
   echo "   💡 Un téléchargement précédent a laissé des morceaux : ./reparer.sh peut les assembler."

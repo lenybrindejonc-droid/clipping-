@@ -14,12 +14,18 @@
 
     <form id="form" class="card">
       <div class="url-row">
-        <input id="url" type="url" required placeholder="https://www.youtube.com/watch?v=…" autocomplete="off" />
+        <input id="url" type="url" required placeholder="Lien YouTube ou Twitch (twitch.tv/videos/…)" autocomplete="off" />
         <button id="go" type="submit">Générer les shorts</button>
       </div>
       <details>
         <summary>Réglages</summary>
         <div class="grid">
+          <label class="wide">Campagne
+            <select id="campagne">
+              <option value="">Aucune (réglages à la main)</option>
+              <option value="boeshi">Boeshi GTA 6 (Content Rewards)</option>
+            </select></label>
+          <p id="campagne-info" class="muted small wide" hidden></p>
           <label>Nombre de clips
             <input id="num" type="number" min="1" max="30" value="5" /></label>
           <label>Durée min (s)
@@ -70,8 +76,22 @@
           <label class="check"><input id="subs" type="checkbox" checked /> Sous-titres animés</label>
           <label class="check"><input id="zoom" type="checkbox" checked /> Zoom sur les moments forts</label>
           <label class="check"><input id="hook" type="checkbox" /> Incruster l'accroche sur la vidéo</label>
+          <label class="wide">Texte obligatoire dans chaque légende (facultatif)
+            <input id="mention" type="text" maxlength="120" placeholder="ex. twitch.tv/darealboeshi" /></label>
+          <label>Image à incruster (overlay)
+            <select id="overlay"><option value="">Aucune</option></select></label>
+          <label>Position de l'image
+            <select id="overlay-pos">
+              <option value="bas">En bas (au-dessus de la légende TikTok)</option>
+              <option value="milieu">Au milieu</option>
+              <option value="haut">En haut</option>
+            </select></label>
+          <label class="file-label wide">
+            <input id="overlay-file" type="file" accept="image/png,image/webp,image/jpeg" hidden />
+            <span class="btn ghost">🖼️ Ajouter une image à incruster</span></label>
+          <p id="overlay-info" class="muted small wide" hidden></p>
           <label class="wide">Règles de la campagne (facultatif)
-            <textarea id="rules" rows="2" maxlength="1500"
+            <textarea id="rules" rows="2" maxlength="4000"
               placeholder="Ex. : 30 s maximum, #gta6 obligatoire, pas de spoilers de l'histoire"></textarea></label>
           <label class="check"><input id="hq" type="checkbox" checked /> Qualité max 1440p (plus lent)</label>
         </div>

@@ -409,6 +409,25 @@ def transcribe_local(path: Path, progress: Progress, language: str | None = None
     return {"language": info.language, "segments": segments}
 
 
+OVERLAY_Y = {"haut": "60", "milieu": "(H-h)/2", "bas": "H-h-290"}
+
+
+def _overlay_filter(image: Path, position: str) -> str:
+    """Pose l'image de campagne sur la vidéo [pre] → [v].
+
+    Image au format 9:16 : elle couvre tout l'écran (le créateur l'a prévue ainsi).
+    Sinon (bandeau, logo) : réduite si besoin, centrée, en haut, au milieu ou en bas.
+    « bas » reste au-dessus de la zone cachée par la légende TikTok."""
+    w, h = probe_size(image)
+    if abs(w / h - OUT_W / OUT_H) < 0.03:
+        return f"[1:v]scale={OUT_W}:{OUT_H}[ov];[pre][ov]overlay=0:0:format=auto[v]"
+    f = min(1.0, OUT_W * 0.9 / w, OUT_H * 0.25 / h)
+    tw, th = max(2, int(w * f) // 2 * 2), max(2, int(h * f) // 2 * 2)
+    y = OVERLAY_Y.get(position, OVERLAY_Y["bas"])
+    return (f"[1:v]scale={tw}:{th}:flags=lanczos[ov];"
+            f"[pre][ov]overlay=(W-w)/2:{y}:format=auto[v]")
+
+
 def render_clip(
     src: Path,
     out: Path,
@@ -422,8 +441,13 @@ def render_clip(
     sub_style: dict | None = None,
     zoom_at: float | None = None,
     facecam: str = "auto",
+    overlay: Path | None = None,
+    overlay_pos: str = "bas",
 ) -> None:
-    """Découpe [start, end], recadre en 9:16 et incruste les sous-titres."""
+    """Découpe [start, end], recadre en 9:16 et incruste les sous-titres.
+
+    `overlay` : image (PNG transparent de préférence) exigée par une campagne, posée
+    par-dessus tout, du début à la fin du clip."""
     duration = end - start
     src_w, src_h = probe_size(src)
     filters: list[str] = []
@@ -478,10 +502,15 @@ def render_clip(
                   sub_pos=sub_pos, hook_pos=hook_pos, style=sub_style)
         filters.append(f"ass={ass.name}")
 
-    vf = ",".join(filters) + "[v]"
+    entrees = ["-ss", f"{start:.3f}", "-t", f"{duration:.3f}", "-i", str(src.resolve())]
+    if overlay is not None and Path(overlay).exists():
+        entrees += ["-i", str(Path(overlay).resolve())]
+        vf = ",".join(filters) + "[pre];" + _overlay_filter(Path(overlay), overlay_pos)
+    else:
+        vf = ",".join(filters) + "[v]"
     cmd = [
         "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
-        "-ss", f"{start:.3f}", "-t", f"{duration:.3f}", "-i", str(src.resolve()),
+        *entrees,
         "-filter_complex", vf, "-map", "[v]", "-map", "0:a?",
         "-c:v", "libx264", "-preset", X264_PRESET, "-threads", "0", "-crf", "18" if high_quality else "20", "-pix_fmt", "yuv420p",
         "-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart",

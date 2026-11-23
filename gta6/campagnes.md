@@ -63,6 +63,17 @@ après les 10 % de frais**. Ce n'est qu'un calcul, pas une prévision de tes ré
   gameplay chaotique ; renvoyer les spectateurs vers ses lives Twitch.
 - Colle exactement aux critères de `presets.py` (type GTA). Pas de produit à promouvoir.
 - Budget petit : il peut s'épuiser vite, donc publier tôt.
+- **Brief complet (rejointe le 23/11)** :
+  - mention obligatoire dans chaque légende : `twitch.tv/darealboeshi` ;
+  - public : au moins 40 % USA, UK, Canada, Australie → tout en anglais ;
+  - chaque clip doit rester en ligne 30 jours et garder 0,8 % d'engagement ;
+  - uniquement des VOD Twitch récentes de GTA 6 ; exploiter TOUTE la VOD, pas 1 ou 2 moments ;
+  - **overlay fourni obligatoire, visible pendant tout le clip** ;
+  - priorité : blagues sur sa voix, ses imitations de voix, le « mewing » quand il est
+    concentré ou a peur ; aussi « chad edits » (quand il a la classe) et légendes mèmes
+    façon Sam Sulek (« me in class when it's show and tell day ») ;
+  - à lire avant de publier : guide d'échauffement des nouveaux comptes, processus
+    d'approbation, guide pour cibler le public américain.
 
 ## À faire toi-même
 

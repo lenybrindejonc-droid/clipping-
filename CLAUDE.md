@@ -46,6 +46,12 @@ depuis le Space : le jeton YouTube ne doit pas être sur un serveur public).
   YouTube. L'utilisateur a TikTok + YouTube Shorts, sans préférence de streamer.
   Je ne peux PAS parcourir les campagnes : liste derrière connexion, et la lecture des pages a
   été refusée par une sécurité de l'environnement. Il colle les briefs, je règle le site dessus.
+- **Campagne choisie : « Boeshi GTA 6 Clipping »** (brief complet résumé dans `gta6/campagnes.md`).
+  Écartées : Fanvue (pub pour site adulte), Puffco (matériel de cannabis, risque de retrait).
+  Le site a un choix « Campagne → Boeshi » qui remplit tout (anglais, 15 clips de 15–45 s,
+  mention `twitch.tv/darealboeshi` ajoutée à chaque légende, consignes du brief).
+  **Overlay** obligatoire : lien pas encore reçu. Quand il l'envoie, le mettre dans
+  `static/overlays/` (survit aux redémarrages, contrairement à un envoi depuis l'interface).
 
 ## Pièges rencontrés (ne pas refaire le diagnostic)
 
@@ -132,6 +138,10 @@ depuis le Space : le jeton YouTube ne doit pas être sur un serveur public).
 - **Modification impossible pendant le montage** : boutons désactivés, message explicite.
 - **Projet terminé = rafraîchissement lent (10 s)** pour voir les changements faits depuis un
   autre appareil (son iPhone restait figé avant).
+- **Overlay de campagne** : image incrustée sur tout le clip (`render_clip(overlay=…)`).
+  Image 9:16 → plein écran ; sinon centrée en haut / milieu / bas (bas = au-dessus de la
+  légende TikTok, sous les sous-titres). Gardée aussi quand on modifie un clip.
+- **Liens Twitch** acceptés (site et `telecharger.sh`). Pas testé ici (pas d'accès réseau).
 - **Bibliothèque** : onglet 📚, tout clip gardé 30 jours automatiquement.
 - **Téléchargement groupé** : clips + `textes.md` (accroches, légendes, vérifications).
 
