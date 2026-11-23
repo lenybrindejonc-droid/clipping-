@@ -23,9 +23,8 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Redirect
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, ValidationError
 
-from . import controle, lessons, pipeline, presets, textes
+from . import lessons, pipeline, presets
 from .highlights import find_moments
-from .subtitles import SEUIL_CLIP, confiance
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA = Path(os.getenv("DATA_DIR", ROOT / "data")).resolve()
@@ -143,8 +142,8 @@ def _ajoute_mention(clip: dict, mention: str) -> dict:
 class JobRequest(BaseModel):
     url: str | None = None
     num_clips: int = Field(5, ge=1, le=30)
-    min_duration: int = Field(10, ge=5, le=120)
-    max_duration: int = Field(25, ge=10, le=180)   # plafonné à 30 s par highlights.py
+    min_duration: int = Field(15, ge=5, le=120)
+    max_duration: int = Field(40, ge=10, le=180)
     layout: str = Field("auto", pattern="^(auto|crop|blur|gaming)$")
     content_type: str = Field("auto", pattern="^(auto|gaming|podcast|vlog|tuto|humour|sport)$")
     facecam: str = Field("auto", pattern="^(auto|hg|hd|bg|bd|aucune)$")
@@ -155,8 +154,7 @@ class JobRequest(BaseModel):
     overlay: str = Field("", pattern=NOM_OVERLAY)  # image de campagne posée sur tout le clip
     overlay_pos: str = Field("bas", pattern="^(haut|milieu|bas)$")
     subtitles: bool = True
-    show_hook: bool = True       # accroche incrustée dès la 1re image (sinon : texte à copier)
-    masquer_texte: bool = True   # floute le texte déjà incrusté dans la source
+    show_hook: bool = False      # accroche incrustée sur la vidéo (sinon : texte à copier)
     zoom: bool = True            # zoom progressif sur le moment fort
     high_quality: bool = False
     language: str | None = None
@@ -220,29 +218,31 @@ def _progress(job_id: str, stage: str):
     return cb
 
 
-def _pics_du_clip(energie: list[float], mouvement: list[float], start: float, end: float,
-                  nombre: int = 3, ecart: float = 5.0) -> list[float]:
-    """Jusqu'à 3 moments forts du clip (son + image), espacés d'au moins 5 s : un petit
-    zoom sur chacun rythme le clip. Toujours au moins le pic principal s'il existe."""
-    from .highlights import intensite
+def _pic_du_clip(energie: list[float], mouvement: list[float],
+                 start: float, end: float) -> float | None:
+    """Seconde la plus forte du clip (son + image), mesurée depuis son début."""
+    import numpy as np
 
-    courbe = intensite(energie, mouvement, start, end)
+    i0, i1 = int(start), int(end)
     duree = end - start
-    if courbe is None or courbe.max() <= 0:
-        return []
-    pics: list[float] = []
-    for i in sorted(range(len(courbe)), key=lambda k: -courbe[k]):
-        t = i + 0.5
-        if courbe[i] < 0.75 * courbe.max() or len(pics) >= nombre:
-            break
-        if 1.0 <= t <= duree - 1.5 and all(abs(t - p) >= ecart for p in pics):
-            pics.append(round(t, 2))
-    return sorted(pics)
 
+    def normalise(valeurs):
+        part = valeurs[i0:i1] if valeurs else []
+        if len(part) < 3:
+            return None
+        a = np.array(part, dtype=float)
+        etendue = a.max() - a.min()
+        return (a - a.min()) / etendue if etendue > 1e-6 else None
 
-def _sous_titres_ok(req: dict, conf: float | None) -> bool:
-    """Sous-titres seulement si la transcription du clip est assez sûre."""
-    return bool(req.get("subtitles", True)) and (conf is None or conf >= SEUIL_CLIP)
+    courbes = [c for c in (normalise(energie), normalise(mouvement)) if c is not None]
+    if not courbes:
+        return None
+    n = min(len(c) for c in courbes)
+    score = sum(c[:n] for c in courbes)
+    pic = float(np.argmax(score)) + 0.5          # milieu de la seconde la plus forte
+    if pic < 1.0 or pic > duree - 1.5:           # il faut la place pour la montée et le retour
+        return None
+    return round(pic, 2)
 
 
 def _chrono(stage: str, t0: float) -> float:
@@ -274,7 +274,7 @@ def run_job(job_id: str) -> None:
         _update(job_id, title=info["title"], channel=info["channel"], duration=info["duration"])
 
         tr = pipeline.transcribe(info["path"], _progress(job_id, "transcribe"), req.get("language"),
-                                 info["duration"], [req.get("streamer", ""), req.get("jeu", "")])
+                                 info["duration"])
         t0 = _chrono("transcription", t0)
         (work / "transcript.json").write_text(json.dumps(tr, ensure_ascii=False))
 
@@ -292,27 +292,19 @@ def run_job(job_id: str) -> None:
             print(f"[analyse] profil d'image indisponible ({exc})", flush=True)
             mouvement = []
         t0 = _chrono("analyse son et image", t0)
-        (work / "profils.json").write_text(json.dumps({"energie": energie, "mouvement": mouvement}))
 
         _progress(job_id, "analyze")(0.3, "L'IA cherche les moments les plus viraux…")
-        moments, engine, note, ecartes = find_moments(
+        moments, engine, note = find_moments(
             tr["segments"], info["title"], info["duration"],
             req["num_clips"], req["min_duration"], req["max_duration"], energie, mouvement,
             req.get("content_type", "auto"), req.get("rules", ""),
             req.get("streamer", ""), req.get("jeu", ""), req.get("mention", ""),
         )
-        # Titre, hashtags et légendes tirés du texte du clip (gratuit), puis mention obligatoire
-        mots_tr = [w for s in tr["segments"] for w in s["words"]]
-        moments = [{**m, **textes.legendes(m, _clip_text(mots_tr, m["start"], m["end"]),
-                                           req.get("streamer", ""), req.get("jeu", ""),
-                                           req.get("language") or tr.get("language"))}
-                   for m in moments]
         moments = [_ajoute_mention(m, req.get("mention", "")) for m in moments]
         t0 = _chrono("analyse IA", t0)
         if not moments:
             raise RuntimeError("Aucun moment exploitable trouvé (vidéo sans parole ?).")
-        _update(job_id, engine=engine, engine_note=note,
-                ecartes=[{"start": c["start"], "end": c["end"], "raison": c["rejet"]} for c in ecartes])
+        _update(job_id, engine=engine, engine_note=note)
 
         reglages = presets.get(req.get("content_type", "auto"))
         words = [w for s in tr["segments"] for w in s["words"]]
@@ -321,50 +313,29 @@ def run_job(job_id: str) -> None:
         for i, m in enumerate(moments, 1):
             render((i - 1) / len(moments), f"Montage du clip {i}/{len(moments)}…")
             name = f"clip_{i:02d}.mp4"
-            conf = confiance(words, m["start"], m["end"])
-            m["confiance_sous_titres"] = conf
-            # Accroche de 4 à 7 mots qui dit ce qui se passe, affichée dès la 1re image
-            m["hook"] = textes.accroche(
-                _clip_text(words, m["start"], m["end"]), req.get("streamer", ""), req.get("jeu", ""),
-                # les propositions de Claude ; en mode sans IA, « hook » n'est que le début brut
-                # du passage, donc on écrit l'accroche à partir de ce qui se passe
-                ([m.get("hook", "")] + [h.get("texte", "") for h in m.get("hooks") or []])
-                if engine == "claude" else []) or m.get("hook", "")
-            zones = pipeline.render_clip(
+            pipeline.render_clip(
                 info["path"], work / name, m["start"], m["end"], words,
-                layout=req["layout"], subtitles=_sous_titres_ok(req, conf),
-                hook=textes.sans_emojis(m["hook"]) if req.get("show_hook") and m.get("hook") else None,
-                masquer_texte=req.get("masquer_texte", True),
+                layout=req["layout"], subtitles=req["subtitles"],
+                hook=m.get("hook") if req.get("show_hook") else None,
                 high_quality=req.get("high_quality", False),
                 sub_style=reglages["sous_titres"], facecam=req.get("facecam", "auto"),
-                zoom_at=(_pics_du_clip(energie, mouvement, m["start"], m["end"])
+                zoom_at=(_pic_du_clip(energie, mouvement, m["start"], m["end"])
                          if reglages.get("zoom") and req.get("zoom", True) else None),
                 overlay=_overlay_path(req.get("overlay", "")),
                 overlay_pos=req.get("overlay_pos", "bas"),
             )
-            publier = time.strftime("%Y-%m-%d", time.localtime(time.time() + 86400 * (i - 1)))
-            clips.append({**m, "publier_le": publier, "reaction": "", "hook_on_video": textes.sans_emojis(m["hook"]) if req.get("show_hook") else "",
-                          "texte_source_floute": len(zones),
+            clips.append({**m, "hook_on_video": m.get("hook") if req.get("show_hook") else "",
                           "file": name, "thumb": name.replace(".mp4", ".jpg"),
                           "duration": round(m["end"] - m["start"], 1), "layout": req["layout"],
                           "text": _clip_text(words, m["start"], m["end"]), "version": 1})
-            rapport = controle.controler(clips[-1], work / name, req)
-            clips[-1] |= {"rapport": rapport, "mis_de_cote": bool(rapport["echecs"])}
             _update(job_id, clips=clips)
-            if clips[-1]["mis_de_cote"]:
-                print(f"[contrôle] clip {i} mis de côté : {rapport['echecs']}", flush=True)
-                t0 = _chrono(f"montage clip {i}", t0)
-                continue
             try:
                 garder_automatiquement(job, clips[-1])
             except Exception as exc:
                 print(f"[bibliothèque] clip non gardé ({exc})", flush=True)
             t0 = _chrono(f"montage clip {i}", t0)
 
-        bons = sum(not c["mis_de_cote"] for c in clips)
-        cote = len(clips) - bons
-        _update(job_id, status="done", progress=100,
-                message=f"{bons} shorts prêts" + (f", {cote} mis de côté (voir leur rapport)" if cote else " !"))
+        _update(job_id, status="done", progress=100, message=f"{len(clips)} shorts prêts !")
         ok = True
     except Exception as exc:
         traceback.print_exc()
@@ -382,15 +353,6 @@ def run_job(job_id: str) -> None:
 
 
 # ---------------------------------------------------------------- modification d'un clip
-
-def _profils(work: Path) -> tuple[list, list]:
-    """Profils son et image de la source (pour refaire les zooms lors d'une modification)."""
-    try:
-        d = json.loads((work / "profils.json").read_text())
-        return d.get("energie") or [], d.get("mouvement") or []
-    except Exception:
-        return [], []
-
 
 def _words(work: Path) -> list[dict]:
     tr = json.loads((work / "transcript.json").read_text())
@@ -442,7 +404,6 @@ class ClipEdit(BaseModel):
     start: float = Field(ge=0)
     end: float = Field(gt=0)
     hook: str = Field("", max_length=120)
-    reaction: str = Field("", max_length=100)   # ta propre réaction, incrustée en 2e moitié
     text: str | None = Field(None, max_length=5000)
     layout: str = Field("auto", pattern="^(auto|crop|blur|gaming)$")
     content_type: str = Field("auto", pattern="^(auto|gaming|podcast|vlog|tuto|humour|sport)$")
@@ -486,30 +447,16 @@ def rerender_clip(job_id: str, n: int, edit: dict) -> None:
             (work / "transcript.json").write_text(json.dumps(tr, ensure_ascii=False))
 
         start, end = edit["start"], edit["end"]
-        conf = confiance(words, start, end)
         pipeline.render_clip(
             src, work / clip["file"], start, end, words, layout=edit["layout"],
-            subtitles=_sous_titres_ok(req, conf), hook=textes.sans_emojis(edit["hook"]) or None,
-            masquer_texte=req.get("masquer_texte", True),
-            reaction=textes.sans_emojis(edit.get("reaction", "")) or None,
-            zoom_at=(_pics_du_clip(*_profils(work), start, end)
-                     if presets.get(req.get("content_type", "auto")).get("zoom")
-                     and req.get("zoom", True) else None),
+            subtitles=req["subtitles"], hook=edit["hook"].strip() or None,
             high_quality=req.get("high_quality", False), facecam=req.get("facecam", "auto"),
             overlay=_overlay_path(req.get("overlay", "")), overlay_pos=req.get("overlay_pos", "bas"),
         )
         _set_clip(job_id, n, start=round(start, 2), end=round(end, 2), duration=round(end - start, 1),
-                  confiance_sous_titres=conf, reaction=edit.get("reaction", "").strip(),
                   hook_on_video=edit["hook"].strip(), layout=edit["layout"],
                   text=_clip_text(words, start, end),
                   version=clip.get("version", 1) + 1, rendering=None, error=None)
-        clip = jobs[job_id]["clips"][n]
-        rapport = controle.controler(clip, work / clip["file"], req)
-        _set_clip(job_id, n, rapport=rapport, mis_de_cote=bool(rapport["echecs"]))
-        tous = jobs[job_id]["clips"]
-        cote = sum(bool(c.get("mis_de_cote")) for c in tous)
-        _update(job_id, message=f"{len(tous) - cote} shorts prêts"
-                                + (f", {cote} mis de côté (voir leur rapport)" if cote else " !"))
     except Exception as exc:
         traceback.print_exc()
         _set_clip(job_id, n, rendering=None, error=pipeline._strip(str(exc).strip().splitlines()[-1]
@@ -891,8 +838,7 @@ def garder_automatiquement(job: dict, clip: dict) -> dict | None:
 
     entree = {k: clip.get(k) for k in ("title", "hook", "hooks", "description", "captions",
                                        "hashtags", "kind", "spoiler", "duration",
-                                       "virality_score", "campaign_check", "publier_le",
-                                       "rapport", "mis_de_cote")}
+                                       "virality_score", "campaign_check")}
     entree |= {"id": cle, "projet": job.get("title") or job["id"], "ajoute_le": time.time(),
                "publie_le": None, "youtube_id": ""}
     (dossier / "meta.json").write_text(json.dumps(entree, ensure_ascii=False, indent=1))
@@ -920,8 +866,7 @@ def garder_clip(job_id: str, n: int):
 
     entree = {k: clip.get(k) for k in ("title", "hook", "hooks", "description", "captions",
                                        "hashtags", "kind", "spoiler", "duration",
-                                       "virality_score", "campaign_check", "publier_le",
-                                       "rapport", "mis_de_cote")}
+                                       "virality_score", "campaign_check")}
     entree |= {"id": cle, "projet": job.get("title") or job_id, "ajoute_le": time.time(),
                "publie_le": None, "youtube_id": ""}
     (dossier / "meta.json").write_text(json.dumps(entree, ensure_ascii=False, indent=1))
@@ -990,26 +935,15 @@ def bibliotheque_zip(a_publier: bool = True):
     return FileResponse(archive, filename="bibliotheque.zip", media_type="application/zip")
 
 
-def _fiche_textes(job: dict, tous: list[dict] | None = None) -> str:
+def _fiche_textes(job: dict) -> str:
     """Toutes les accroches et légendes dans un fichier texte : elles seraient perdues sinon."""
     lignes = [f"# {job.get('title') or 'Projet'}", ""]
-    cote = [c for c in tous or [] if c.get("mis_de_cote")]
-    if cote:
-        lignes += ["Mis de côté par le contrôle (non exportés) :"]
-        lignes += [f"  - {c.get('file')} — {' ; '.join(c['rapport']['echecs'])}" for c in cote]
-        lignes.append("")
     for i, c in enumerate(job["clips"], 1):
         lignes += [f"## Clip {i} — {c.get('title', '')}",
                    f"Durée : {c.get('duration')} s · score {c.get('virality_score')}/100"
                    + (f" · {c.get('kind')}" if c.get("kind") else "")
                    + (" · ⚠️ SPOILER" if c.get("spoiler") else ""),
-                   f"Fichier : {c.get('file')}",
-                   f"Source : {c.get('projet') or job.get('title') or '?'}"
-                   + (f" · à publier le {c['publier_le']} (1 clip par source et par jour)"
-                      if c.get("publier_le") else "")]
-        if c.get("rapport"):
-            lignes += ["Rapport : " + " | ".join(controle.texte(c["rapport"]))]
-        lignes.append("")
+                   f"Fichier : {c.get('file')}", ""]
         accroches = c.get("hooks") or ([{"texte": c["hook"], "pourquoi": ""}] if c.get("hook") else [])
         if accroches:
             lignes.append("Accroches proposées :")
@@ -1037,20 +971,17 @@ def telecharger_tout(job_id: str):
     job = jobs.get(job_id)
     if not job:
         raise HTTPException(404, "Projet introuvable.")
-    # seuls les clips qui ont passé le contrôle partent ; les autres restent sur le site
-    bons = [c for c in job["clips"] if not c.get("mis_de_cote")]
-    fichiers = [(JOBS / job_id / c["file"]) for c in bons]
+    fichiers = [(JOBS / job_id / c["file"]) for c in job["clips"]]
     fichiers = [f for f in fichiers if f.exists()]
     if not fichiers:
-        raise HTTPException(404, "Aucun clip à exporter : ils ont été effacés par le serveur, "
-                                 "ou tous mis de côté par le contrôle (voir leur rapport).")
+        raise HTTPException(404, "Aucun clip disponible : ils ont été effacés par le serveur.")
 
     nom = re.sub(r"[^\w -]", "", (job.get("title") or "clips"))[:50].strip() or "clips"
     archive = JOBS / job_id / "tous_les_clips.zip"
     with zipfile.ZipFile(archive, "w", zipfile.ZIP_STORED) as z:   # vidéos déjà compressées
         for f in fichiers:
             z.write(f, f.name)
-        z.writestr("textes.md", _fiche_textes({**job, "clips": bons}, job["clips"]))
+        z.writestr("textes.md", _fiche_textes(job))
     return FileResponse(archive, filename=f"{nom}.zip", media_type="application/zip")
 
 

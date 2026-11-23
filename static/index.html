@@ -29,9 +29,9 @@
           <label>Nombre de clips
             <input id="num" type="number" min="1" max="30" value="5" /></label>
           <label>Durée min (s)
-            <input id="min" type="number" min="5" max="120" value="10" /></label>
+            <input id="min" type="number" min="5" max="120" value="15" /></label>
           <label>Durée max (s)
-            <input id="max" type="number" min="10" max="180" value="25" /></label>
+            <input id="max" type="number" min="10" max="180" value="40" /></label>
           <label>Cadrage
             <select id="layout">
               <option value="auto">Automatique (recommandé)</option>
@@ -66,7 +66,7 @@
           <label>Langue
             <select id="lang">
               <option value="">Détection auto</option>
-              <option value="fr" selected>Français</option>
+              <option value="fr">Français</option>
               <option value="en">Anglais</option>
               <option value="es">Espagnol</option>
               <option value="de">Allemand</option>
@@ -75,8 +75,7 @@
             </select></label>
           <label class="check"><input id="subs" type="checkbox" checked /> Sous-titres animés</label>
           <label class="check"><input id="zoom" type="checkbox" checked /> Zoom sur les moments forts</label>
-          <label class="check"><input id="hook" type="checkbox" checked /> Accroche sur la vidéo dès la 1re image</label>
-          <label class="check"><input id="masquer" type="checkbox" checked /> Flouter le texte déjà incrusté dans la vidéo</label>
+          <label class="check"><input id="hook" type="checkbox" /> Incruster l'accroche sur la vidéo</label>
           <label class="wide">Texte obligatoire dans chaque légende (facultatif)
             <input id="mention" type="text" maxlength="120" placeholder="ex. twitch.tv/darealboeshi" /></label>
           <label>Image à incruster (overlay)
@@ -136,10 +135,6 @@
         <div class="bar"><div id="bar-fill"></div></div>
         <p id="job-msg" class="muted"></p>
         <p id="job-note" class="warn" hidden></p>
-        <details id="job-ecartes" hidden>
-          <summary></summary>
-          <ul id="job-ecartes-list" class="small muted"></ul>
-        </details>
         <button id="cancel-job" class="btn ghost" type="button" hidden>Annuler cette vidéo</button>
         <a id="zip-all" class="btn" hidden download>⬇️ Tout télécharger (clips + textes)</a>
       </div>
@@ -166,11 +161,6 @@
           <span class="time muted"></span>
         </div>
         <h4 class="title"></h4>
-        <p class="cote warn" hidden></p>
-        <details class="rapport" hidden>
-          <summary></summary>
-          <ul class="rapport-list"></ul>
-        </details>
         <div class="hooks" hidden>
           <p class="muted small">Accroches proposées — clique pour copier, ou « Sur la vidéo »
             pour l'incruster (les emojis y seront en noir et blanc) :</p>
@@ -232,8 +222,6 @@
           <p class="muted small t-dur"></p>
           <label>Texte à incruster en haut de la vidéo (vide = rien, pour l'écrire toi-même sur TikTok)
             <input class="e-hook" type="text" maxlength="120" /></label>
-          <label>Ma réaction (s'affiche à la place de l'accroche, en 2e moitié du clip)
-            <input class="e-reaction" type="text" maxlength="100" placeholder="ex. Il a vraiment cru que ça allait passer" /></label>
           <label>Sous-titres (corrige les mots mal écrits)
             <textarea class="e-text" rows="4"></textarea></label>
           <label>Cadrage

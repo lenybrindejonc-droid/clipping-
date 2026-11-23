@@ -17,7 +17,7 @@ PRESETS: dict[str, dict] = {
     "gaming": {
         "nom": "Gaming (stream, let's play)",
         "zoom": True,
-        "n": 5, "min_d": 10, "max_d": 25, "layout": "gaming",
+        "n": 5, "min_d": 20, "max_d": 40, "layout": "gaming",
         "sous_titres": {"mots": 3, "taille": 96, "hauteur": 0.27},
         "consignes": """CONTENU : partie de jeu (let's play, stream).
 
@@ -25,15 +25,15 @@ Un pic sonore montre qu'il s'est passé quelque chose ; à toi de décider si c'
 et où il commence et finit.
 
 Ce qui fait un bon clip :
-- Les 2 premières secondes donnent envie de rester. Commence SUR le moment fort (le crash,
-  le cri, la police qui débarque), jamais sur la mise en place : les gens partent à 1 seconde.
+- Les 2 premières secondes donnent envie de rester. Commence juste avant la mise en place
+  (la police qui arrive, « regarde ça », un plan annoncé), pas deux sujets plus tôt.
 - Le dénouement est DANS le clip (le crash, l'évasion, le raté, la phrase qui fait rire).
   Termine 1 à 2 secondes après la réaction, pas 20 secondes plus tard.
 - Il se comprend seul : si la blague demande 10 minutes de contexte, ignore-la.
 - Le joueur réagit. Du gameplay impressionnant avec un joueur silencieux vaut moins qu'une
   vraie réaction humaine.
 - Aucun temps mort : silences longs, menus, chargements, carte, inventaire.
-- Court : 10 à 25 secondes, 30 au grand maximum.
+- Court plutôt que long : 20 à 40 secondes sauf si l'histoire l'exige.
 
 Ce qui marche : poursuites et évasions, crashs et chutes, braquages qui tournent mal,
 comportement absurde des PNJ, cascade parfaite, le joueur qui craque, échange drôle.

@@ -152,8 +152,6 @@ def lire_textes(dossier: Path) -> dict[str, dict]:
             section = None
         elif courant is not None and ligne.startswith("Fichier : "):
             clips[ligne.split("Fichier : ", 1)[1].strip()] = courant
-        elif courant is not None and ligne.startswith("Source : "):
-            courant["source"] = ligne[len("Source : "):].split(" · ", 1)[0].strip()
         elif ligne.startswith("Légende YouTube"):
             section = "description"
         elif ligne.startswith(("Légende ", "Accroches", "Durée", "##", "  [")):
@@ -167,23 +165,15 @@ def plan(clips: list[Path], textes: dict, par_jour: int, heures: list[str],
          premier_jour: datetime) -> list[tuple[Path, str, str, datetime]]:
     """Associe à chaque clip son titre, sa description et sa date de publication."""
     programme = []
-    occupation: dict[int, list[str]] = {}       # jour → sources déjà publiées ce jour-là
-    for clip in clips:
+    for i, clip in enumerate(clips):
+        jour = premier_jour + timedelta(days=i // par_jour)
+        h, m = heures[i % par_jour].split(":")
+        quand = jour.replace(hour=int(h), minute=int(m), second=0, microsecond=0)
         infos = textes.get(clip.name, {})
-        source = infos.get("source") or "?"
-        # Jamais 2 clips de la même vidéo source le même jour : TikTok et YouTube les
-        # voient comme du contenu répété, et ils se font concurrence.
-        d = 0
-        while len(occupation.get(d, [])) >= par_jour or source in occupation.get(d, []):
-            d += 1
-        occupation.setdefault(d, []).append(source)
-        h, m = heures[len(occupation[d]) - 1].split(":")
-        quand = (premier_jour + timedelta(days=d)).replace(hour=int(h), minute=int(m),
-                                                           second=0, microsecond=0)
         titre = (infos.get("titre") or clip.stem)[:100]
         description = infos.get("description") or ""
         programme.append((clip, titre, description, quand))
-    return sorted(programme, key=lambda x: x[3])
+    return programme
 
 
 def main() -> None:
@@ -193,8 +183,7 @@ def main() -> None:
     p.add_argument("--site", default="", help="adresse du site (sinon SITE_URL du fichier .env)")
     p.add_argument("--bibliotheque", action="store_true",
                    help="prendre les clips de la bibliothèque plutôt qu'un projet")
-    p.add_argument("--par-jour", type=int, default=3, help="clips publiés par jour, toutes sources confondues (défaut : 3) ; "
-                        "jamais plus d'1 par vidéo source")
+    p.add_argument("--par-jour", type=int, default=3, help="clips publiés par jour (défaut : 3)")
     p.add_argument("--heures", default="12:30,18:30,21:00",
                    help="heures de publication, séparées par des virgules (heure de Paris)")
     p.add_argument("--a-partir-de", default="", help="premier jour, « AAAA-MM-JJ » (défaut : demain)")

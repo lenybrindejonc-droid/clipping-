@@ -12,25 +12,6 @@ MAX_CHARS = 16   # au-delà, la ligne passerait sur 2 lignes à l'écran
 # Petit retard : un sous-titre légèrement en retard se remarque moins qu'un en avance
 DELAY = float(os.getenv("SUBTITLE_DELAY", "0.08"))
 HOLD = 0.35      # le dernier mot d'une phrase reste un peu après avoir été prononcé
-MOTS_MIN, MOTS_MAX = 2, 4   # 2 à 4 mots à l'écran à la fois
-# Confiance de la transcription (0 à 1). Sous ces seuils, mieux vaut rien qu'un texte absurde.
-SEUIL_GROUPE = float(os.getenv("SEUIL_SOUS_TITRES", "0.6"))   # un groupe de mots
-SEUIL_CLIP = float(os.getenv("SEUIL_SOUS_TITRES_CLIP", "0.6"))  # le clip entier
-SEUIL_MOT = float(os.getenv("SEUIL_SOUS_TITRES_MOT", "0.5"))    # un mot seul
-
-
-def confiance(words: list[dict], start: float, end: float) -> float | None:
-    """Confiance moyenne des mots du clip (pondérée par leur durée), ou None si inconnue."""
-    notes = [(w["p"], max(w["end"] - w["start"], 0.05)) for w in words
-             if w.get("p") is not None and w["end"] > start and w["start"] < end]
-    if not notes:
-        return None
-    return round(sum(p * d for p, d in notes) / sum(d for _, d in notes), 3)
-
-
-def _fiable(groupe: list[dict]) -> bool:
-    notes = [w["p"] for w in groupe if w.get("p") is not None]
-    return not notes or sum(notes) / len(notes) >= SEUIL_GROUPE
 
 
 def _fix_timing(words: list[dict]) -> list[dict]:
@@ -73,18 +54,15 @@ def write_ass(
     sub_pos: tuple[int, int] | None = None,
     hook_pos: tuple[int, int] | None = None,
     style: dict | None = None,
-    hook_fin: float | None = None,
-    reaction: str | None = None,
 ) -> None:
     style = style or {}
-    mots_max = min(MOTS_MAX, max(MOTS_MIN, int(style.get("mots", WORDS_PER_LINE))))
+    mots_max = int(style.get("mots", WORDS_PER_LINE))
     taille = int(style.get("taille", 96))
     hauteur = float(style.get("hauteur", 0.27))
     chars_max = MAX_CHARS + 6 * (mots_max - WORDS_PER_LINE)
     sub_tag = f"{{\\an5\\pos({sub_pos[0]},{sub_pos[1]})}}" if sub_pos else ""
     hook_tag = f"{{\\an5\\pos({hook_pos[0]},{hook_pos[1]})}}" if hook_pos else ""
-    words = [x for x in _fix_timing(words) if x["end"] > clip_start and x["start"] < clip_end
-             and (x.get("p") is None or x["p"] >= SEUIL_MOT)]   # mot inventé : on le saute
+    words = [x for x in _fix_timing(words) if x["end"] > clip_start and x["start"] < clip_end]
 
     # Regroupe les mots en petites lignes
     groups: list[list[dict]] = []
@@ -98,18 +76,6 @@ def write_ass(
         ):
             groups.append([])
         groups[-1].append(word)
-
-    # Un mot seul à l'écran se lit mal : on le rattache au groupe voisin s'il est proche
-    fusion: list[list[dict]] = []
-    for group in groups:
-        if (fusion and (len(group) < MOTS_MIN or len(fusion[-1]) < MOTS_MIN)
-                and len(fusion[-1]) + len(group) <= MOTS_MAX
-                and group[0]["start"] - fusion[-1][-1]["end"] <= 1.0):
-            fusion[-1].extend(group)
-        else:
-            fusion.append(group)
-    # Groupe trop incertain (« DU QUI JET ») : on ne l'affiche pas
-    groups = [g for g in fusion if _fiable(g)]
 
     # (début, fin, texte) pour chaque mot ; une seule ligne à l'écran à la fois
     timeline: list[list] = []
@@ -136,21 +102,12 @@ def write_ass(
         if end - start >= 0.04:
             events.append(f"Dialogue: 0,{_ts(start)},{_ts(end)},Main,,0,0,0,,{text}")
 
-    duree = clip_end - clip_start
-    if reaction:
-        # Ta réaction prend la place de l'accroche pour la 2e moitié du clip (même zone :
-        # jamais deux textes l'un sur l'autre)
-        debut_reaction = max(duree / 2, 2.0) if hook else 0.0
-        hook_fin = min(hook_fin or duree, debut_reaction)
-        events.insert(0, f"Dialogue: 1,{_ts(debut_reaction)},{_ts(duree)},Reaction,,0,0,0,,"
-                         f"{hook_tag}{{\\fad(120,0)}}{_clean(reaction, majuscules=False)}")
     if hook:
-        # Visible DÈS LA PREMIÈRE IMAGE (c'est là qu'on décide de scroller), jusqu'à hook_fin
-        # (par défaut : tout le clip)
-        hook_end = min(hook_fin if hook_fin else clip_end - clip_start, clip_end - clip_start)
+        # Bandeau visible pendant les 4 premières secondes (le moment où on décide de scroller)
+        hook_end = min(4.0, clip_end - clip_start)
         events.insert(0, f"Dialogue: 1,{_ts(0)},{_ts(hook_end)},Hook,,0,0,0,,"
                          # l'accroche garde son écriture normale, contrairement aux sous-titres
-                         f"{hook_tag}{{\\fad(0,300)}}{_clean(hook, majuscules=False)}")
+                         f"{hook_tag}{{\\fad(120,300)}}{_clean(hook, majuscules=False)}")
 
     header = f"""[Script Info]
 ScriptType: v4.00+
@@ -162,7 +119,6 @@ ScaledBorderAndShadow: yes
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
 Style: Main,{FONT},{taille},&H00FFFFFF,&H00FFFFFF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,7,2,2,60,60,{int(h * hauteur)},1
-Style: Reaction,{FONT},60,&H00111111,&H00FFFFFF,&H0000E5FF,&H0000E5FF,-1,0,0,0,100,100,0,0,3,18,0,8,90,90,{int(h * 0.12)},1
 Style: Hook,{FONT},64,&H00111111,&H00FFFFFF,&H00FFFFFF,&H00FFFFFF,-1,0,0,0,100,100,0,0,3,18,0,8,90,90,{int(h * 0.12)},1
 
 [Events]

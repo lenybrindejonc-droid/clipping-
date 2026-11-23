@@ -129,8 +129,3 @@ label.wide, p.wide { grid-column: 1 / -1; }
 .onglet.actif { background: var(--accent); color: #fff; border-color: var(--accent); }
 #biblio-zip { margin-bottom: 16px; }
 .garder { width: 100%; padding: 10px; font-size: 14px; }
-
-/* Clip mis de côté par le contrôle : grisé */
-.clip.de-cote video { opacity: 0.55; }
-.rapport ul, #job-ecartes ul { margin: 6px 0 0; padding-left: 18px; }
-.rapport li { font-size: 0.85em; margin: 2px 0; }

@@ -25,7 +25,6 @@ function params() {
     overlay_pos: $("overlay-pos").value,
     subtitles: $("subs").checked,
     show_hook: $("hook").checked,
-    masquer_texte: $("masquer").checked,
     zoom: $("zoom").checked,
     high_quality: $("hq").checked,
     language: $("lang").value || null,
@@ -230,20 +229,6 @@ function render(job) {
   note.hidden = !job.engine_note;
   note.textContent = job.engine_note ? `⚠️ Claude n'a pas été utilisé : ${job.engine_note}. Les moments ont été choisis par une méthode basique, bien moins bonne.` : "";
 
-  // Moments repérés mais écartés par les règles (contexte manquant, trop proches…)
-  const ecartes = job.ecartes || [];
-  $("job-ecartes").hidden = !ecartes.length;
-  if (ecartes.length) {
-    $("job-ecartes").querySelector("summary").textContent =
-      `${ecartes.length} moment(s) écarté(s) par les règles — voir pourquoi`;
-    $("job-ecartes-list").innerHTML = "";
-    ecartes.forEach((e) => {
-      const li = document.createElement("li");
-      li.textContent = `${fmt(e.start)} → ${fmt(e.end)} : ${e.raison}`;
-      $("job-ecartes-list").appendChild(li);
-    });
-  }
-
   const cancel = $("cancel-job");
   cancel.hidden = job.status !== "queued";
   cancel.onclick = async () => {
@@ -278,37 +263,10 @@ function buildCard(job, clip, i) {
   video.src = src;
   video.poster = `/media/${job.id}/${clip.thumb}?v=${v}`;
   q(".score").textContent = `🔥 ${clip.virality_score}/100`;
-  q(".time").textContent = `${fmt(clip.start)} → ${fmt(clip.end)} · ${Math.round(clip.duration)}s`
-    + (clip.publier_le ? ` · à publier le ${clip.publier_le.split("-").reverse().slice(0, 2).join("/")}` : "");
+  q(".time").textContent = `${fmt(clip.start)} → ${fmt(clip.end)} · ${Math.round(clip.duration)}s`;
   q(".title").textContent = clip.title;
   q(".reason").textContent = clip.reason;
   if (clip.kind) { q(".kind").hidden = false; q(".kind").textContent = clip.kind; }
-  // --- Rapport de contrôle
-  const rapport = clip.rapport;
-  if (rapport) {
-    const conf = rapport.confiance_sous_titres;
-    const lignes = [
-      `Durée ${rapport.duree} s · score ${rapport.score ?? "?"}/100`,
-      `Sous-titres ${rapport.sous_titres}` + (conf != null ? ` (confiance ${Math.round(conf * 100)} %)` : ""),
-      ...rapport.echecs.map((e) => `⛔ ${e}`),
-      ...rapport.avertissements.map((a) => `⚠️ ${a}`),
-    ];
-    q(".rapport").hidden = false;
-    q(".rapport").querySelector("summary").textContent = rapport.echecs.length
-      ? "📋 Rapport : échec" : rapport.avertissements.length
-        ? `📋 Rapport : ${rapport.avertissements.length} point(s) à vérifier` : "📋 Rapport : tout est bon";
-    lignes.forEach((l) => {
-      const li = document.createElement("li");
-      li.textContent = l;
-      q(".rapport-list").appendChild(li);
-    });
-  }
-  if (clip.mis_de_cote) {
-    q(".cote").hidden = false;
-    q(".cote").textContent = "⛔ Mis de côté : pas exporté ni gardé dans la bibliothèque. "
-      + "Corrige-le avec ✏️ Modifier (le contrôle sera refait).";
-    node.classList.add("de-cote");
-  }
   if (clip.spoiler) q(".spoiler").hidden = false;
   // --- Légendes par plateforme
   const legendes = clip.captions || {};
@@ -329,7 +287,6 @@ function buildCard(job, clip, i) {
 
   const dl = q(".dl");
   dl.href = src;
-  if (clip.mis_de_cote) dl.textContent = "Télécharger quand même";
   dl.download = `${(clip.title || "clip").replace(/[^\p{L}\p{N} _-]/gu, "").slice(0, 50)}.mp4`;
   q(".copy").addEventListener("click", async (e) => {
     await navigator.clipboard.writeText(q(".caption").value);
@@ -380,7 +337,7 @@ function buildCard(job, clip, i) {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            start: clip.start, end: clip.end, hook: h.texte, reaction: clip.reaction || "",
+            start: clip.start, end: clip.end, hook: h.texte,
             layout: clip.layout || job.request.layout || "auto", text: null,
           }),
         });
@@ -477,7 +434,6 @@ function buildCard(job, clip, i) {
     q(".edit-toggle").textContent = editor.hidden ? "✏️ Modifier" : "Fermer l'éditeur";
   });
   q(".e-hook").value = clip.hook_on_video || "";
-  q(".e-reaction").value = clip.reaction || "";
   q(".e-text").value = clip.text || "";
   q(".e-layout").value = clip.layout || job.request.layout || "auto";
   editor.querySelectorAll(".step").forEach((b) =>
@@ -493,7 +449,6 @@ function buildCard(job, clip, i) {
   q(".cancel").addEventListener("click", () => {
     state.start = clip.start; state.end = clip.end;
     q(".e-hook").value = clip.hook_on_video || "";
-    q(".e-reaction").value = clip.reaction || "";
     q(".e-text").value = clip.text || "";
     show();
     editor.hidden = true;
@@ -510,7 +465,6 @@ function buildCard(job, clip, i) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           start: state.start, end: state.end, hook: q(".e-hook").value, layout: q(".e-layout").value,
-          reaction: q(".e-reaction").value,
           // texte envoyé seulement s'il a été corrigé (sinon il suit les nouvelles bornes)
           text: textChanged ? q(".e-text").value : null,
         }),
@@ -677,7 +631,7 @@ const CAMPAGNES = {
       "Bandeau Twitch @darealboeshi incrusté en bas pendant tout le clip.",
     champs: {
       type: "gaming", streamer: "Boeshi", jeu: "GTA 6", lang: "en",
-      num: 15, min: 10, max: 25, mention: "twitch.tv/darealboeshi",
+      num: 15, min: 15, max: 45, mention: "twitch.tv/darealboeshi",
       overlay: "boeshi.png", "overlay-pos": "bas",
       rules: [
         "Campaign: Boeshi GTA 6 clipping. Goal: funny, high-retention clips that drive viewers to twitch.tv/darealboeshi.",

@@ -17,7 +17,7 @@ from .subtitles import write_ass
 
 Progress = Callable[[float, str], None]
 
-WHISPER_MODEL = os.getenv("WHISPER_MODEL", "small")   # base se trompe trop en français
+WHISPER_MODEL = os.getenv("WHISPER_MODEL", "base")
 OUT_W, OUT_H = 1080, 1920
 # Petits processeurs (≤ 2 cœurs) : encodage plus rapide, fichier un peu plus gros
 X264_PRESET = os.getenv("X264_PRESET") or ("superfast" if (os.cpu_count() or 4) <= 2 else "veryfast")
@@ -184,20 +184,15 @@ def probe_fps(path: Path) -> float:
         return 30.0
 
 
-def _zoom_filter(pics, fps: float, amplitude: float = 0.14) -> str:
-    """Zoom progressif sur chaque moment fort : montée, maintien, retour au calme.
-
-    `pics` : un instant ou une liste d'instants (secondes depuis le début du clip).
-    Plusieurs petits zooms rythment le clip et le rendent différent de la source."""
+def _zoom_filter(pic: float, fps: float, amplitude: float = 0.14) -> str:
+    """Zoom progressif centré sur le moment fort : montée, maintien, retour au calme."""
     montee, maintien, retour = 0.35, 1.2, 0.7
     t = f"(on/{fps:.3f})"
-    z = "1"
-    for pic in sorted(pics if isinstance(pics, (list, tuple)) else [pics], reverse=True):
-        d, f_ = pic - montee, pic + maintien            # début de la montée, fin du maintien
-        z = (f"if(between({t},{d:.2f},{f_ + retour:.2f}),"
-             f"if(lt({t},{pic:.2f}),1+{amplitude}*({t}-{d:.2f})/{montee},"
-             f"if(lt({t},{f_:.2f}),{1 + amplitude:.3f},"
-             f"{1 + amplitude:.3f}-{amplitude}*({t}-{f_:.2f})/{retour})),{z})")
+    d, f_ = pic - montee, pic + maintien            # début de la montée, fin du maintien
+    z = (f"if(lt({t},{d:.2f}),1,"
+         f"if(lt({t},{pic:.2f}),1+{amplitude}*({t}-{d:.2f})/{montee},"
+         f"if(lt({t},{f_:.2f}),{1 + amplitude:.3f},"
+         f"if(lt({t},{f_ + retour:.2f}),{1 + amplitude:.3f}-{amplitude}*({t}-{f_:.2f})/{retour},1))))")
     return (f"zoompan=z='{z}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'"
             f":d=1:s={OUT_W}x{OUT_H}:fps={fps:.3f}")
 
@@ -366,45 +361,24 @@ def motion_profile(path: Path, fps: int = 3) -> list[float]:
 
 
 def transcribe(path: Path, progress: Progress, language: str | None = None,
-               duration: float | None = None, noms: list[str] | None = None) -> dict:
-    """Transcription avec horodatage et note de confiance pour chaque mot.
+               duration: float | None = None) -> dict:
+    """Transcription en ligne (Groq) si une clé est configurée, sinon locale."""
+    from . import cloud_transcribe
 
-    Par défaut : faster-whisper sur la machine (gratuit, sans compte). TRANSCRIPTION=groq
-    dans .env repasse par Groq (gratuit aussi, plus rapide, mais c'est un service en ligne).
-    Les noms mal entendus sont ensuite corrigés (corrections.json + streamer + jeu).
-    """
-    from . import cloud_transcribe, corrections
-
-    tr = None
-    if os.getenv("TRANSCRIPTION", "local").lower() == "groq" and cloud_transcribe.available():
+    if cloud_transcribe.available():
         try:
-            tr = cloud_transcribe.transcribe(path, duration or probe_duration(path), progress, language)
+            return cloud_transcribe.transcribe(path, duration or probe_duration(path), progress, language)
         except Exception as exc:
-            print(f"[transcribe] Groq indisponible : {exc}", flush=True)
-            progress(0.0, f"Groq impossible ({exc}) → transcription sur la machine…")
-    if tr is None:
-        tr = transcribe_local(path, progress, language, duration, corrections.mots_cles(noms))
-    return corrections.corriger_transcription(tr, noms)
+            print(f"[transcribe] Groq indisponible : {exc}")
+            if os.getenv("TRANSCRIBE_FALLBACK", "0") != "1":
+                # Pas de repli silencieux : en local, ça peut prendre des heures sur un petit PC
+                raise RuntimeError(f"transcription en ligne (Groq) impossible : {exc}") from exc
+            progress(0.0, f"Groq impossible ({exc}) → transcription locale (lente)…")
+    return transcribe_local(path, progress, language)
 
 
-MORCEAU = int(os.getenv("TRANSCRIPTION_MORCEAU", "600"))   # 10 min par morceau
-
-
-def _audio_morceau(path: Path, debut: float, duree: float):
-    """Décode seulement [debut, debut + duree] : la mémoire reste petite même sur 3 h."""
-    import numpy as np
-
-    out = subprocess.run(
-        ["ffmpeg", "-nostdin", "-loglevel", "error", "-ss", f"{debut}", "-t", f"{duree}",
-         "-i", str(path), "-vn", "-ac", "1", "-ar", "16000", "-f", "s16le", "-"],
-        capture_output=True, check=True,
-    )
-    return np.frombuffer(out.stdout, np.int16).astype(np.float32) / 32768.0
-
-
-def transcribe_local(path: Path, progress: Progress, language: str | None = None,
-                     duration: float | None = None, mots_cles: str = "") -> dict:
-    """faster-whisper, morceau par morceau, avec la probabilité de chaque mot (« p »)."""
+def transcribe_local(path: Path, progress: Progress, language: str | None = None) -> dict:
+    """Transcription Whisper locale avec horodatage au mot près."""
     global _whisper
     from faster_whisper import WhisperModel
 
@@ -412,47 +386,27 @@ def transcribe_local(path: Path, progress: Progress, language: str | None = None
         progress(0.0, f"Chargement du modèle Whisper ({WHISPER_MODEL})…")
         _whisper = WhisperModel(WHISPER_MODEL, device="auto", compute_type="int8",
                                 cpu_threads=os.cpu_count() or 4)
-    duree = duration or probe_duration(path)
-    n = max(1, int(-(-duree // MORCEAU)))
-    langue = language or None
+
+    seg_iter, info = _whisper.transcribe(
+        load_audio(path), word_timestamps=True, vad_filter=True,
+        beam_size=1, condition_on_previous_text=False,  # ~2x plus rapide, qualité quasi identique
+        language=language or None
+    )
     segments = []
-    for k in range(n):
-        debut = k * MORCEAU
-        audio = _audio_morceau(path, debut, MORCEAU + 1)
-        if not len(audio):
-            continue
-        seg_iter, info = _whisper.transcribe(
-            audio, word_timestamps=True, vad_filter=True, language=langue,
-            beam_size=1, condition_on_previous_text=False,  # ~2x plus rapide, évite les boucles
-            # les noms à reconnaître (Michou, GTA 6…) : Whisper les écrit alors correctement
-            initial_prompt=(f"Stream de jeu vidéo. {mots_cles}." if mots_cles else None),
-        )
-        langue = langue or info.language    # même langue pour tous les morceaux
-        for s in seg_iter:
-            if s.start >= MORCEAU and k + 1 < n:
-                break                       # la seconde de recouvrement appartient au suivant
-            mots: list[dict] = []
-            for w in s.words or []:
-                texte = w.word.strip()
-                if not texte:
-                    continue
-                if mots and texte[0] in "'’-" and not w.word.startswith(" "):
-                    # « C » + « 'est » → « C'est » ; « accroche » + « -toi » → « accroche-toi »
-                    mots[-1]["word"] += texte
-                    mots[-1]["end"] = round(w.end + debut, 2)
-                    mots[-1]["p"] = round(min(mots[-1]["p"], float(w.probability)), 3)
-                    continue
-                mots.append({"start": round(w.start + debut, 2), "end": round(w.end + debut, 2),
-                             "word": texte, "p": round(float(w.probability), 3)})
-            segments.append({
-                "start": round(s.start + debut, 2),
-                "end": round(s.end + debut, 2),
-                "text": " ".join(m["word"] for m in mots) or s.text.strip(),
-                "words": mots,
-            })
-            progress(min((debut + s.end) / duree, 1.0),
-                     f"Transcription sur la machine… (morceau {k + 1}/{n})")
-    return {"language": langue, "segments": segments}
+    for s in seg_iter:
+        segments.append({
+            "start": round(s.start, 2),
+            "end": round(s.end, 2),
+            "text": s.text.strip(),
+            "words": [
+                {"start": round(w.start, 2), "end": round(w.end, 2), "word": w.word.strip()}
+                for w in (s.words or []) if w.word.strip()
+            ],
+        })
+        if info.duration:
+            progress(min(s.end / info.duration, 1.0),
+                     "Transcription locale (lente — ajoute une clé GROQ_API_KEY pour aller 50x plus vite)…")
+    return {"language": info.language, "segments": segments}
 
 
 OVERLAY_Y = {"haut": "60", "milieu": "(H-h)/2", "bas": "H-h-280"}
@@ -505,14 +459,11 @@ def render_clip(
     hook: str | None = None,
     high_quality: bool = False,
     sub_style: dict | None = None,
-    zoom_at: float | list | None = None,
+    zoom_at: float | None = None,
     facecam: str = "auto",
     overlay: Path | None = None,
     overlay_pos: str = "bas",
-    masquer_texte: bool = False,
-    hook_fin: float | None = None,
-    reaction: str | None = None,
-) -> list:
+) -> None:
     """Découpe [start, end], recadre en 9:16 et incruste les sous-titres.
 
     `overlay` : image (PNG transparent de préférence) exigée par une campagne, posée
@@ -559,27 +510,16 @@ def render_clip(
             f"[b]scale={OUT_W}*1.15:-2:flags=lanczos,crop={OUT_W}:ih,{sharpen}[fg];"
             f"[bg][fg]overlay=(W-w)/2:(H-h)/2-80,setsar=1"
         )
-    # Texte déjà incrusté dans la source (sous-titres d'origine, alertes…) : flouté avant tout
-    zones = []
-    if masquer_texte:
-        from . import texte_source
-        zones = texte_source.zones_texte(src, start, end, src_w, src_h,
-                                         exclure=data if mode == "facecam" else None)
-        if zones:
-            base = texte_source.filtre_flou(zones) + ";" + base.replace("[0:v]", "[src]", 1)
     filters.append(base)
 
     # Zoom AVANT les sous-titres : ils doivent rester fixes et nets
-    pics = [p for p in (zoom_at if isinstance(zoom_at, (list, tuple)) else [zoom_at])
-            if p is not None and 0.5 < p < duration - 0.5]
-    if pics:
-        filters.append(_zoom_filter(pics, probe_fps(src)))
+    if zoom_at is not None and 0.5 < zoom_at < duration - 0.5:
+        filters.append(_zoom_filter(zoom_at, probe_fps(src)))
 
-    if (subtitles and words) or hook or reaction:
+    if (subtitles and words) or hook:
         ass = out.with_suffix(".ass")
         write_ass(ass, words if subtitles else [], start, end, OUT_W, OUT_H, hook=hook,
-                  sub_pos=sub_pos, hook_pos=hook_pos, style=sub_style, hook_fin=hook_fin,
-                  reaction=reaction)
+                  sub_pos=sub_pos, hook_pos=hook_pos, style=sub_style)
         filters.append(f"ass={ass.name}")
 
     entrees = ["-ss", f"{start:.3f}", "-t", f"{duration:.3f}", "-i", str(src.resolve())]
@@ -604,4 +544,3 @@ def render_clip(
          "-frames:v", "1", "-vf", "scale=360:-2", out.with_suffix(".jpg").name],
         cwd=out.parent, check=False, capture_output=True,
     )
-    return zones
