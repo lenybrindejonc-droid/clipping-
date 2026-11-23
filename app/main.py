@@ -307,6 +307,12 @@ def run_job(job_id: str) -> None:
             req.get("content_type", "auto"), req.get("rules", ""),
             req.get("streamer", ""), req.get("jeu", ""), req.get("mention", ""),
         )
+        # Titre, hashtags et légendes tirés du texte du clip (gratuit), puis mention obligatoire
+        mots_tr = [w for s in tr["segments"] for w in s["words"]]
+        moments = [{**m, **textes.legendes(m, _clip_text(mots_tr, m["start"], m["end"]),
+                                           req.get("streamer", ""), req.get("jeu", ""),
+                                           req.get("language") or tr.get("language"))}
+                   for m in moments]
         moments = [_ajoute_mention(m, req.get("mention", "")) for m in moments]
         t0 = _chrono("analyse IA", t0)
         if not moments:

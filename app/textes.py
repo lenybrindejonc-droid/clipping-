@@ -77,4 +77,78 @@ def accroche(texte: str, streamer: str = "", jeu: str = "", proposees: list[str]
     citation = _citation(texte)
     if citation:
         return f"« {citation} »"
-    return f"{qui} en plein live sur {jeu.strip()}" if jeu.strip() else ""
+    if not jeu.strip():
+        return ""
+    return f"{streamer.strip()} en plein live sur {jeu.strip()}" if streamer.strip() else f"En plein live sur {jeu.strip()}"
+
+
+def _tag(texte: str) -> str:
+    return "#" + re.sub(r"[^a-z0-9]", "", _sans_accents(texte).lower())
+
+
+def hashtags(texte: str, streamer: str = "", jeu: str = "", langue: str | None = "fr") -> list[str]:
+    """3 à 5 hashtags ciblés : le jeu, le streamer, le sujet. Jamais #drole, #yt, #creator…"""
+    tags = []
+    if jeu.strip():
+        tags.append(_tag(jeu))
+        if (langue or "fr").startswith("fr"):
+            tags.append(_tag(jeu) + "fr")
+    if streamer.strip():
+        tags.append(_tag(streamer))
+    s = sujet(texte)
+    if s:
+        tags.append(s[3])
+    if len(tags) < 3 and jeu.strip():
+        tags.append(_tag(jeu) + "clips")
+    if len(tags) < 3:
+        tags.append("#gaming")
+    propres = [t for t in dict.fromkeys(tags) if len(t) > 2 and t.lower() not in INTERDITS]
+    return propres[:5]
+
+
+def titre(texte: str, streamer: str = "", jeu: str = "") -> str:
+    """Titre qui contient ce qu'on tape dans la recherche : streamer, jeu, sujet."""
+    s = sujet(texte)
+    if s:
+        t = f"{streamer.strip() or 'Il'} {s[2]}"
+    else:
+        t = f"{streamer.strip()} en plein live" if streamer.strip() else "En plein live"
+    if jeu.strip():
+        t += f" sur {jeu.strip()}"
+    citation = _citation(texte)
+    if citation and len(t) + len(citation) + 5 <= 100:
+        t += f" : « {citation} »"
+    return t[:100]
+
+
+def nettoyer_legende(texte: str, tags: list[str], extra: list[str] | None = None) -> str:
+    """Retire les hashtags vagues ou inventés et met les hashtags ciblés à la fin."""
+    sans = re.sub(r"(?<!\w)#[\wÀ-ſ]+", "", texte or "")
+    sans = re.sub(r"[ \t]{2,}", " ", sans).strip()
+    fin = " ".join(list(dict.fromkeys(tags + (extra or []))))
+    return f"{sans}\n\n{fin}".strip() if sans else fin
+
+
+def legendes(clip: dict, texte: str, streamer: str = "", jeu: str = "",
+             langue: str | None = "fr") -> dict:
+    """Titre, hashtags et légendes par plateforme, à partir du texte du clip."""
+    tags = hashtags(texte, streamer, jeu, langue)
+    t = titre(texte, streamer, jeu)
+    caps = clip.get("captions") or {}
+    credit = f"Clip du live de {streamer.strip()}" if streamer.strip() else ""
+
+    def avec_titre(autre: str) -> str:
+        # le titre précis d'abord (c'est lui qu'on trouve en recherche), le reste ensuite
+        reste = re.sub(r"(?<!\w)#[\w\u00C0-\u017F]+", "", autre or "").strip()
+        return f"{t}\n{reste}" if reste and reste.lower() not in t.lower() else t
+
+    return {
+        "title": t,
+        "hashtags": tags,
+        "captions": {
+            "tiktok": nettoyer_legende(avec_titre(caps.get("tiktok", "")), tags),
+            "youtube": nettoyer_legende(f"{t}\n{credit}", tags, ["#Shorts"]),
+            "reels": nettoyer_legende(t, tags),
+        },
+        "description": nettoyer_legende(f"{t}\n{credit}", tags),
+    }
