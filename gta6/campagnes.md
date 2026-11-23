@@ -53,6 +53,17 @@ après les 10 % de frais**. Ce n'est qu'un calcul, pas une prévision de tes ré
   YouTube retirent les vidéos qui mettent en avant du matériel de drogue. Lire le brief pour
   savoir ce qui doit être montré à l'image.
 
+### « Boeshi GTA 6 Clipping » (vue le 23/11/2026, lancée 1 semaine avant) — **la meilleure**
+
+- Type : ClipLaunch (vérifié), payée au CPM. **1,00 $ les 1 000 vues**, minimum 3 $, plafond 300 $ par clip.
+- Plateformes : TikTok, Instagram, **YouTube**.
+- Budget : 111 $ dépensés sur 1 750 $, **seulement 10 participants**.
+- Source : streams Twitch de Boeshi (twitch.tv/darealboeshi).
+- Consigne visible : réactions drôles, poursuites de police folles, rencontres inattendues,
+  gameplay chaotique ; renvoyer les spectateurs vers ses lives Twitch.
+- Colle exactement aux critères de `presets.py` (type GTA). Pas de produit à promouvoir.
+- Budget petit : il peut s'épuiser vite, donc publier tôt.
+
 ## À faire toi-même
 
 1. Créer un compte sur **contentrewards.com** et connecter tes comptes TikTok et YouTube.
