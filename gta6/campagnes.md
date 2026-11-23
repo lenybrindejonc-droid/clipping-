@@ -81,6 +81,10 @@ après les 10 % de frais**. Ce n'est qu'un calcul, pas une prévision de tes ré
   (source : heistclips.com, relevé du 19/11). Seule campagne GTA étiquetée « FR » trouvée.
 - Catégorie « French Clipping » sur Content Rewards (ex. une campagne Call of Duty FR, fermée).
 - Ssemble (ssemble.com/fr/clip-rewards) : place de marché française, 0,10 à 3 $ les 1 000 vues.
+- Autres sites (recherche du 23/11, articles souvent écrits par les plateformes elles-mêmes) :
+  Vyro (~3 $/1 000 vues, gains bloqués jusqu'à la fin de campagne), Clipping.net,
+  Promote.fun, ClipAffiliates, Klippify, Elev8or. En français : Ssemble, NF Clipping (Notify,
+  0,40 €/1 000 vues, ~70 clippeurs).
 - Raison du choix FR : Boeshi exige 40 % de public USA/UK/CAN/AUS, difficile pour un compte
   français.
 
