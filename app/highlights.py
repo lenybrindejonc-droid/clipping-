@@ -305,6 +305,9 @@ def heuristic(segments, title, n, min_d, max_d) -> list[dict]:
             words = len(body.split())
             score = words / dur * 10 + 8 * len(HOOK_WORDS.findall(body)) + 4 * body.count("?") + 3 * body.count("!")
             score += 15 * bool(HOOK_WORDS.search(seg["text"]) or "?" in seg["text"])
+            # son + image : un pic de rires, de cris ou d'action vaut plus que le texte seul
+            pics = [(x.get("e") or 0) + (x.get("v") or 0) for x in segments[i:j]]
+            score += 3 * max(pics or [0])
             candidates.append((score, seg["start"], segments[j - 1]["end"], body))
     candidates.sort(reverse=True)
     picked: list[tuple] = []
@@ -344,6 +347,135 @@ def _snap(clips, segments, duration, min_d, max_d) -> list[dict]:
     return out
 
 
+# ---------------------------------------------------------------- règles de choix (gratuites)
+# Appliquées après Claude OU après la méthode sans IA : elles ne coûtent rien.
+
+DUREE_MAX_ABSOLUE = 30.0     # au-delà, les gens décrochent avant la fin
+TRANCHE = 600.0              # au plus 1 clip par tranche de 10 minutes de la source
+ECART_MIN = 60.0             # et jamais deux clips à moins d'une minute l'un de l'autre
+AVANCE_PIC = 1.2             # le clip démarre au plus 1,2 s avant le moment fort
+
+# Début de phrase qui suppose qu'on a entendu ce qui précède
+AMORCE = re.compile(
+    r"^\s*(et|mais|donc|du coup|alors|parce que|parce qu'|puis|ensuite|en fait|bref|voilà|"
+    r"ouais donc|comme je disais|par contre|sinon)\b[\s,]*", re.I)
+# Renvois à quelque chose qui s'est passé hors du clip
+RENVOI = re.compile(
+    r"\b(tout à l'heure|comme je (vous |t')?(l')?ai dit|comme je disais|comme on a dit|"
+    r"la dernière fois|l'autre fois|on en a parlé|je vous en ai parlé|comme prévu|"
+    r"le truc de (tout à l'heure|hier)|as i said|like i said|earlier today)\b", re.I)
+
+
+def intensite(energy: list[float] | None, motion: list[float] | None, t0: float, t1: float):
+    """Courbe 0..2 (son + image) seconde par seconde entre t0 et t1, ou None."""
+    import numpy as np
+
+    i0, i1 = max(int(t0), 0), max(int(t1), int(t0) + 1)
+    courbes = []
+    for valeurs in (energy, motion):
+        part = valeurs[i0:i1] if valeurs else []
+        if len(part) < 3:
+            continue
+        a = np.array(part, dtype=float)
+        etendue = a.max() - a.min()
+        if etendue > 1e-6:
+            courbes.append((a - a.min()) / etendue)
+    if not courbes:
+        return None
+    n = min(len(c) for c in courbes)
+    return sum(c[:n] for c in courbes)
+
+
+def _mots(segments: list[dict], t0: float, t1: float) -> list[dict]:
+    return [w for s in segments for w in s.get("words", []) if w["end"] > t0 and w["start"] < t1]
+
+
+def _texte(segments: list[dict], t0: float, t1: float) -> str:
+    return " ".join(w["word"] for w in _mots(segments, t0, t1))
+
+
+def demarrer_sur_le_pic(clip: dict, segments: list[dict], duration: float,
+                        energy=None, motion=None, min_d: float = 10, max_d: float = 25) -> dict:
+    """Recale le clip pour qu'il COMMENCE sur le moment fort, sans mise en place.
+
+    Le moment fort = la première seconde qui atteint 80 % du maximum son + image du passage.
+    Le début est posé sur le début d'un mot, au plus AVANCE_PIC secondes avant ce moment ;
+    la fin est recalée pour que la durée tienne entre min_d et max_d (30 s au plus).
+    """
+    max_d = min(max_d, DUREE_MAX_ABSOLUE)
+    start, end = clip["start"], clip["end"]
+    courbe = intensite(energy, motion, start, end)
+    pic = None
+    if courbe is not None and courbe.max() > 0:
+        seuil = 0.8 * float(courbe.max())
+        pic = start + next(i for i, v in enumerate(courbe) if v >= seuil)
+    if pic is not None and pic - start > AVANCE_PIC + 0.8:
+        cible = pic - AVANCE_PIC
+        mots = _mots(segments, cible, pic + 3)
+        # on démarre sur un début de mot, jamais au milieu
+        start = next((w["start"] for w in mots if w["start"] >= cible - 0.05), cible)
+        start = max(clip["start"], min(start, pic))
+    # pas de « et », « du coup »… en premier mot : on démarre juste après
+    debut = _texte(segments, start, start + 2.5)
+    amorce = AMORCE.match(debut)
+    if amorce:
+        n = len(amorce.group(0).split())
+        mots = _mots(segments, start, start + 4)
+        if len(mots) > n:
+            start = mots[n]["start"]
+    # fin : on garde celle choisie si la durée est bonne, sinon on recale sur une fin de mot
+    fins = [w["end"] for s in segments for w in s.get("words", []) if start < w["end"] <= duration]
+    if end - start > max_d:
+        ok = [f for f in fins if f - start <= max_d]
+        end = max(ok) if ok else start + max_d
+    if end - start < min_d:
+        ok = [f for f in fins if min_d <= f - start <= max_d]
+        end = min(ok) if ok else min(duration, start + min_d)
+    return {**clip, "start": round(max(0.0, start - 0.1), 2), "end": round(min(duration, end + 0.3), 2),
+            "pic": round(pic - start, 2) if pic is not None and pic >= start else None}
+
+
+def besoin_de_contexte(clip: dict, segments: list[dict]) -> str:
+    """Raison pour laquelle le clip ne se comprend pas seul, ou '' s'il tient debout."""
+    texte = _texte(segments, clip["start"], clip["end"])
+    m = RENVOI.search(texte)
+    if m:
+        return f"renvoie à un moment hors du clip (« {m.group(0)} »)"
+    if AMORCE.match(_texte(segments, clip["start"], clip["start"] + 2.5)):
+        return "commence au milieu d'une phrase"
+    return ""
+
+
+def espacer(clips: list[dict]) -> tuple[list[dict], list[dict]]:
+    """Au plus 1 clip par tranche de 10 min, et pas deux clips à moins d'une minute.
+
+    `clips` est déjà classé du plus fort au plus faible : on garde le meilleur de chaque tranche.
+    Renvoie (gardés, écartés)."""
+    gardes, ecartes, tranches = [], [], set()
+    for c in clips:
+        tranche = int(c["start"] // TRANCHE)
+        proche = any(abs(c["start"] - g["start"]) < ECART_MIN for g in gardes)
+        if tranche in tranches or proche:
+            ecartes.append({**c, "rejet": f"un meilleur clip existe déjà entre "
+                                          f"{tranche * 10} et {tranche * 10 + 10} min de la source"})
+            continue
+        tranches.add(tranche)
+        gardes.append(c)
+    return gardes, ecartes
+
+
+def appliquer_regles(clips, segments, duration, energy, motion, min_d, max_d):
+    """Recale, filtre et espace les clips. Renvoie (gardés, écartés avec leur raison)."""
+    recales, ecartes = [], []
+    for c in clips:
+        c = demarrer_sur_le_pic(c, segments, duration, energy, motion, min_d, max_d)
+        raison = besoin_de_contexte(c, segments)
+        (ecartes if raison else recales).append({**c, "rejet": raison} if raison else c)
+    recales.sort(key=lambda c: -c.get("virality_score", 0))
+    gardes, trop_proches = espacer(recales)
+    return gardes, ecartes + trop_proches
+
+
 def find_moments(segments, title, duration, n=8, min_d=20, max_d=60,
                  energy: list[float] | None = None, motion: list[float] | None = None,
                  content_type: str = "auto", rules: str = "",
@@ -352,18 +484,25 @@ def find_moments(segments, title, duration, n=8, min_d=20, max_d=60,
         return [], "aucune parole détectée", ""
     annotate_energy(segments, energy or [])
     annotate_motion(segments, motion or [])
+    max_d = min(max_d, DUREE_MAX_ABSOLUE)
+    # on demande plus de candidats que nécessaire : les règles en écartent une partie
+    candidats = min(30, max(n * 2, n + 4))
     engine, note = "claude", ""
     try:
         if not (os.getenv("ANTHROPIC_API_KEY") or "").startswith("sk-ant-"):
             raise RuntimeError("aucune clé ANTHROPIC_API_KEY valide dans le fichier .env")
-        clips = ask_claude(segments, title, n, min_d, max_d, content_type, rules, streamer, jeu,
-                           mention)
+        clips = ask_claude(segments, title, candidats, min_d, max_d, content_type, rules, streamer,
+                           jeu, mention)
     except Exception as exc:  # repli hors-ligne
         note = _explain(exc)
         print(f"[highlights] Claude indisponible ({note}), repli heuristique")
         engine = "heuristique"
-        clips = heuristic(segments, title, n, min_d, max_d)
-    return _snap(clips, segments, duration, min_d, max_d)[:n], engine, note
+        clips = heuristic(segments, title, candidats, min_d, max_d)
+    clips = _snap(clips, segments, duration, min_d, max_d)
+    gardes, ecartes = appliquer_regles(clips, segments, duration, energy, motion, min_d, max_d)
+    for c in ecartes:
+        print(f"[highlights] écarté {c['start']:.0f}-{c['end']:.0f} s : {c['rejet']}", flush=True)
+    return gardes[:n], engine, note
 
 
 def _explain(exc: Exception) -> str:

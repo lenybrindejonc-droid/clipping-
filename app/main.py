@@ -142,8 +142,8 @@ def _ajoute_mention(clip: dict, mention: str) -> dict:
 class JobRequest(BaseModel):
     url: str | None = None
     num_clips: int = Field(5, ge=1, le=30)
-    min_duration: int = Field(15, ge=5, le=120)
-    max_duration: int = Field(40, ge=10, le=180)
+    min_duration: int = Field(10, ge=5, le=120)
+    max_duration: int = Field(25, ge=10, le=180)   # plafonné à 30 s par highlights.py
     layout: str = Field("auto", pattern="^(auto|crop|blur|gaming)$")
     content_type: str = Field("auto", pattern="^(auto|gaming|podcast|vlog|tuto|humour|sport)$")
     facecam: str = Field("auto", pattern="^(auto|hg|hd|bg|bd|aucune)$")

@@ -631,7 +631,7 @@ const CAMPAGNES = {
       "Bandeau Twitch @darealboeshi incrusté en bas pendant tout le clip.",
     champs: {
       type: "gaming", streamer: "Boeshi", jeu: "GTA 6", lang: "en",
-      num: 15, min: 15, max: 45, mention: "twitch.tv/darealboeshi",
+      num: 15, min: 10, max: 25, mention: "twitch.tv/darealboeshi",
       overlay: "boeshi.png", "overlay-pos": "bas",
       rules: [
         "Campaign: Boeshi GTA 6 clipping. Goal: funny, high-retention clips that drive viewers to twitch.tv/darealboeshi.",
