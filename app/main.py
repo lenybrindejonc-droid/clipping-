@@ -23,7 +23,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Redirect
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, ValidationError
 
-from . import lessons, pipeline, presets
+from . import lessons, pipeline, presets, textes
 from .highlights import find_moments
 from .subtitles import SEUIL_CLIP, confiance
 
@@ -155,7 +155,8 @@ class JobRequest(BaseModel):
     overlay: str = Field("", pattern=NOM_OVERLAY)  # image de campagne posée sur tout le clip
     overlay_pos: str = Field("bas", pattern="^(haut|milieu|bas)$")
     subtitles: bool = True
-    show_hook: bool = False      # accroche incrustée sur la vidéo (sinon : texte à copier)
+    show_hook: bool = True       # accroche incrustée dès la 1re image (sinon : texte à copier)
+    masquer_texte: bool = True   # floute le texte déjà incrusté dans la source
     zoom: bool = True            # zoom progressif sur le moment fort
     high_quality: bool = False
     language: str | None = None
@@ -321,10 +322,15 @@ def run_job(job_id: str) -> None:
             name = f"clip_{i:02d}.mp4"
             conf = confiance(words, m["start"], m["end"])
             m["confiance_sous_titres"] = conf
-            pipeline.render_clip(
+            # Accroche de 4 à 7 mots qui dit ce qui se passe, affichée dès la 1re image
+            m["hook"] = textes.accroche(
+                _clip_text(words, m["start"], m["end"]), req.get("streamer", ""), req.get("jeu", ""),
+                [m.get("hook", "")] + [h.get("texte", "") for h in m.get("hooks") or []]) or m.get("hook", "")
+            zones = pipeline.render_clip(
                 info["path"], work / name, m["start"], m["end"], words,
                 layout=req["layout"], subtitles=_sous_titres_ok(req, conf),
-                hook=m.get("hook") if req.get("show_hook") else None,
+                hook=textes.sans_emojis(m["hook"]) if req.get("show_hook") and m.get("hook") else None,
+                masquer_texte=req.get("masquer_texte", True),
                 high_quality=req.get("high_quality", False),
                 sub_style=reglages["sous_titres"], facecam=req.get("facecam", "auto"),
                 zoom_at=(_pic_du_clip(energie, mouvement, m["start"], m["end"])
@@ -332,7 +338,8 @@ def run_job(job_id: str) -> None:
                 overlay=_overlay_path(req.get("overlay", "")),
                 overlay_pos=req.get("overlay_pos", "bas"),
             )
-            clips.append({**m, "hook_on_video": m.get("hook") if req.get("show_hook") else "",
+            clips.append({**m, "hook_on_video": textes.sans_emojis(m["hook"]) if req.get("show_hook") else "",
+                          "texte_source_floute": len(zones),
                           "file": name, "thumb": name.replace(".mp4", ".jpg"),
                           "duration": round(m["end"] - m["start"], 1), "layout": req["layout"],
                           "text": _clip_text(words, m["start"], m["end"]), "version": 1})
@@ -458,7 +465,8 @@ def rerender_clip(job_id: str, n: int, edit: dict) -> None:
         conf = confiance(words, start, end)
         pipeline.render_clip(
             src, work / clip["file"], start, end, words, layout=edit["layout"],
-            subtitles=_sous_titres_ok(req, conf), hook=edit["hook"].strip() or None,
+            subtitles=_sous_titres_ok(req, conf), hook=textes.sans_emojis(edit["hook"]) or None,
+            masquer_texte=req.get("masquer_texte", True),
             high_quality=req.get("high_quality", False), facecam=req.get("facecam", "auto"),
             overlay=_overlay_path(req.get("overlay", "")), overlay_pos=req.get("overlay_pos", "bas"),
         )

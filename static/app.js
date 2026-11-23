@@ -25,6 +25,7 @@ function params() {
     overlay_pos: $("overlay-pos").value,
     subtitles: $("subs").checked,
     show_hook: $("hook").checked,
+    masquer_texte: $("masquer").checked,
     zoom: $("zoom").checked,
     high_quality: $("hq").checked,
     language: $("lang").value || null,

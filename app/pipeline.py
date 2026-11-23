@@ -495,7 +495,9 @@ def render_clip(
     facecam: str = "auto",
     overlay: Path | None = None,
     overlay_pos: str = "bas",
-) -> None:
+    masquer_texte: bool = False,
+    hook_fin: float | None = None,
+) -> list:
     """Découpe [start, end], recadre en 9:16 et incruste les sous-titres.
 
     `overlay` : image (PNG transparent de préférence) exigée par une campagne, posée
@@ -542,6 +544,14 @@ def render_clip(
             f"[b]scale={OUT_W}*1.15:-2:flags=lanczos,crop={OUT_W}:ih,{sharpen}[fg];"
             f"[bg][fg]overlay=(W-w)/2:(H-h)/2-80,setsar=1"
         )
+    # Texte déjà incrusté dans la source (sous-titres d'origine, alertes…) : flouté avant tout
+    zones = []
+    if masquer_texte:
+        from . import texte_source
+        zones = texte_source.zones_texte(src, start, end, src_w, src_h,
+                                         exclure=data if mode == "facecam" else None)
+        if zones:
+            base = texte_source.filtre_flou(zones) + ";" + base.replace("[0:v]", "[src]", 1)
     filters.append(base)
 
     # Zoom AVANT les sous-titres : ils doivent rester fixes et nets
@@ -551,7 +561,7 @@ def render_clip(
     if (subtitles and words) or hook:
         ass = out.with_suffix(".ass")
         write_ass(ass, words if subtitles else [], start, end, OUT_W, OUT_H, hook=hook,
-                  sub_pos=sub_pos, hook_pos=hook_pos, style=sub_style)
+                  sub_pos=sub_pos, hook_pos=hook_pos, style=sub_style, hook_fin=hook_fin)
         filters.append(f"ass={ass.name}")
 
     entrees = ["-ss", f"{start:.3f}", "-t", f"{duration:.3f}", "-i", str(src.resolve())]
@@ -576,3 +586,4 @@ def render_clip(
          "-frames:v", "1", "-vf", "scale=360:-2", out.with_suffix(".jpg").name],
         cwd=out.parent, check=False, capture_output=True,
     )
+    return zones

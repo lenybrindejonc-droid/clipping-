@@ -73,6 +73,7 @@ def write_ass(
     sub_pos: tuple[int, int] | None = None,
     hook_pos: tuple[int, int] | None = None,
     style: dict | None = None,
+    hook_fin: float | None = None,
 ) -> None:
     style = style or {}
     mots_max = min(MOTS_MAX, max(MOTS_MIN, int(style.get("mots", WORDS_PER_LINE))))
@@ -135,11 +136,12 @@ def write_ass(
             events.append(f"Dialogue: 0,{_ts(start)},{_ts(end)},Main,,0,0,0,,{text}")
 
     if hook:
-        # Bandeau visible pendant les 4 premières secondes (le moment où on décide de scroller)
-        hook_end = min(4.0, clip_end - clip_start)
+        # Visible DÈS LA PREMIÈRE IMAGE (c'est là qu'on décide de scroller), jusqu'à hook_fin
+        # (par défaut : tout le clip)
+        hook_end = min(hook_fin if hook_fin else clip_end - clip_start, clip_end - clip_start)
         events.insert(0, f"Dialogue: 1,{_ts(0)},{_ts(hook_end)},Hook,,0,0,0,,"
                          # l'accroche garde son écriture normale, contrairement aux sous-titres
-                         f"{hook_tag}{{\\fad(120,300)}}{_clean(hook, majuscules=False)}")
+                         f"{hook_tag}{{\\fad(0,300)}}{_clean(hook, majuscules=False)}")
 
     header = f"""[Script Info]
 ScriptType: v4.00+
