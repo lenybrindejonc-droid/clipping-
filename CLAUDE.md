@@ -177,7 +177,9 @@ depuis le Space : le jeton YouTube ne doit pas être sur un serveur public).
    Il veut se lancer dans les **podcasts business et discussion** (compte TikTok à part,
    « Podcast Clips FR »). Le type « Podcast / interview » utilise ce cadrage par défaut
    (plein écran 9:16 au lieu de la vidéo entière sur fond flou, demandé le 24/11) ; fond flou
-   seulement si aucun visage n'est trouvé.
+   seulement si aucun visage n'est trouvé. Testé ensuite sur un **vrai** extrait (« Vraiment
+   Riches », clip_06 qu'il a envoyé, fait avec l'ancien fond flou) : les podcasts montés
+   changent de caméra → cadrage décidé **plan par plan** (`_coupures`, `_parole_plan`).
 2. Musique de fond libre de droits, publication directe TikTok.
 2b. Suivi des gains : `gta6/suivi.csv` décrit par le skill `gta6-campagnes-et-gains`, pas encore
    créé (attendre qu'il publie ses premiers clips sous campagne).
