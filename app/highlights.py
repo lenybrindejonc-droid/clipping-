@@ -227,6 +227,29 @@ def _transcript_text(segments: list[dict]) -> str:
     return "\n".join(lignes)
 
 
+PODCAST_ACCROCHES = """
+
+ACCROCHES ET TITRES POUR UN PODCAST — ces règles REMPLACENT le style 1 « descriptif » ci-dessus.
+N'utilise JAMAIS la forme « <personne> <action> dans <émission> » : elle n'a pas de sens ici.
+Ne désigne jamais quelqu'un par une étiquette vague (« un fondateur », « un invité », « il ») :
+le spectateur ne sait pas qui c'est, et ça ne lui dit pas de quoi on parle.
+
+Les 3 accroches, dans cet ordre (champ "style") :
+1) SUJET (va dans "hook") : la question ou l'idée concrète dont parle le passage, telle qu'un
+   spectateur la taperait dans la recherche. 5 à 12 mots, compréhensible sans avoir vu
+   l'émission. Exemples de forme : « Faut-il acheter sa maison quand on est jeune ? »,
+   « Pourquoi il a refusé 10 millions pour sa boîte », « L'erreur qui coule 9 entreprises sur 10 ».
+2) CITATION : la phrase la plus forte réellement dite, mot pour mot, entre guillemets.
+3) QUESTION : une question au spectateur qui le fait réagir en commentaire
+   (« Tu aurais vendu ou pas ? »).
+Toujours 2 emojis collés au dernier mot, choisis selon le ton (💰💰 argent, 🤯🤯 révélation,
+🔥🔥 avis tranché, 😳😳 surprise).
+
+Titre ("title") : le sujet concret avec un chiffre, une promesse précise ou la question posée,
+sans nom d'émission au début. Il doit dire de quoi parle le clip à quelqu'un qui ne connaît
+ni l'invité ni l'émission."""
+
+
 def ask_claude(segments, title, n, min_d, max_d, content_type="auto", rules="",
                streamer="", jeu="", mention="") -> list[dict]:
     import anthropic
@@ -240,7 +263,17 @@ def ask_claude(segments, title, n, min_d, max_d, content_type="auto", rules="",
     if appris:
         systeme += ("\n\nRETOURS DE L'UTILISATEUR sur tes choix précédents — tiens-en compte :\n"
                     + appris)
-    if streamer.strip() or jeu.strip():
+    if content_type == "podcast":
+        # La forme « <streamer> <action> dans <jeu> » est faite pour le gaming : sur un podcast
+        # elle donnait « Un fondateur tranche en pleine crise Covid dans Vraiment Riche ».
+        systeme += PODCAST_ACCROCHES
+        if streamer.strip():
+            systeme += (f"\n\nLa personne principale s'appelle « {streamer.strip()} » : nomme-la "
+                        "seulement si son nom aide à comprendre ou à chercher le clip.")
+        if jeu.strip():
+            systeme += (f"\n\n« {jeu.strip()} » est le nom de l'émission : ne le mets ni dans "
+                        "l'accroche ni au début du titre ; il peut aller dans la description.")
+    elif streamer.strip() or jeu.strip():
         systeme += (f"\n\nPour les accroches : le streamer s'appelle « {streamer.strip() or 'le streamer'} » "
                     f"et le jeu est « {jeu.strip() or 'le jeu'} ». Utilise ces noms exacts.")
     elif content_type == "gaming":
