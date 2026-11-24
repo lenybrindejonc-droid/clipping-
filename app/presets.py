@@ -56,7 +56,8 @@ Mieux vaut 3 clips forts que 8 moyens.""",
     "podcast": {
         "nom": "Podcast / interview",
         "zoom": False,
-        "n": 6, "min_d": 25, "max_d": 60, "layout": "blur",
+        # cadrage serré sur celui qui parle : plein écran vertical (fond flou si aucun visage)
+        "n": 6, "min_d": 25, "max_d": 60, "layout": "parole",
         "sous_titres": {"mots": 4, "taille": 86, "hauteur": 0.22},
         "consignes": """CONTENU : discussion, interview, podcast.
 

@@ -174,7 +174,10 @@ depuis le Space : le jeton YouTube ne doit pas être sur un serveur public).
    bas du visage pendant que le son indique une voix, plan net de 1,5 s minimum. Testé sur un
    faux podcast (2 photos, bouches animées) avec le détecteur de secours Haar ; **pas sur un
    vrai podcast** (YuNet, le détecteur principal, est bloqué dans l'environnement de dev).
-   Il veut se lancer dans les **podcasts business et discussion** (compte TikTok à part).
+   Il veut se lancer dans les **podcasts business et discussion** (compte TikTok à part,
+   « Podcast Clips FR »). Le type « Podcast / interview » utilise ce cadrage par défaut
+   (plein écran 9:16 au lieu de la vidéo entière sur fond flou, demandé le 24/11) ; fond flou
+   seulement si aucun visage n'est trouvé.
 2. Musique de fond libre de droits, publication directe TikTok.
 2b. Suivi des gains : `gta6/suivi.csv` décrit par le skill `gta6-campagnes-et-gains`, pas encore
    créé (attendre qu'il publie ses premiers clips sous campagne).
