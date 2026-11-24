@@ -264,6 +264,81 @@ def _personnes(detections: list[list[tuple]], src_w: int) -> list[float]:
     return [_median(g) for g in groupes if len(g) >= 0.3 * n][:4]
 
 
+def _coupures(images: list, seuil_min: float = 25.0) -> list[int]:
+    """Indices où la caméra change (podcast déjà monté : gros plan → plan large…)."""
+    import cv2
+    import numpy as np
+
+    diffs = [0.0]
+    for (a, _), (b, _) in zip(images, images[1:]):
+        pa, pb = cv2.resize(a, (64, 36)), cv2.resize(b, (64, 36))
+        diffs.append(float(np.abs(pa.astype(np.int16) - pb.astype(np.int16)).mean()))
+    med = float(np.median(diffs)) if diffs else 0.0
+    return [i for i, d in enumerate(diffs) if d > max(seuil_min, 4 * med)]
+
+
+def _parole_plan(detections, images, voix, src_w, debut, fin, x_avant):
+    """Cadrage d'un plan (entre deux changements de caméra) : liste de (indice image, centre x)."""
+    import numpy as np
+
+    dets = detections[debut:fin]
+    places = _personnes(dets, src_w)
+    if not places:                         # personne de visible : on garde le cadre précédent
+        return [(debut, x_avant)]
+    if len(places) == 1:
+        return [(debut, places[0])]
+
+    n = fin - debut
+    activite = np.full((len(places), n), np.nan)
+    precedent: dict[int, np.ndarray] = {}
+    import cv2
+    for i in range(n):
+        faces, (gris, scale) = dets[i], images[debut + i]
+        vus = set()
+        for cx, cy, w in faces:
+            p = int(np.argmin([abs(cx - x) for x in places]))
+            if abs(cx - places[p]) > 0.12 * src_w:
+                continue
+            # bas du visage : de la lèvre supérieure au menton
+            x0, x1 = int((cx - 0.3 * w) * scale), int((cx + 0.3 * w) * scale)
+            y0, y1 = int((cy + 0.15 * w) * scale), int((cy + 0.5 * w) * scale)
+            zone = gris[max(y0, 0):max(y1, 1), max(x0, 0):max(x1, 1)]
+            if zone.size < 20:
+                continue
+            zone = cv2.resize(zone, (32, 16)).astype(np.float32)
+            if p in precedent:
+                activite[p, i] = float(np.abs(zone - precedent[p]).mean())
+            precedent[p] = zone
+            vus.add(p)
+        for p in list(precedent):          # personne pas vue sur cette image : on oublie
+            if p not in vus:
+                precedent.pop(p)
+
+    # Chaque personne a sa « bouche au repos » (barbe, lumière) : on la retire
+    for p in range(len(places)):
+        ligne = activite[p][~np.isnan(activite[p])]
+        if len(ligne):
+            activite[p] -= np.median(ligne)
+
+    par_fenetre = max(1, int(PAROLE_FENETRE * PAROLE_FPS))
+    moyennes = np.array([np.nanmean(a) if (~np.isnan(a)).any() else -1e9 for a in activite])
+    actuel = int(np.argmax(moyennes))
+    keys = [(debut, places[actuel])]
+    for k in range(0, n, par_fenetre):
+        bloc = activite[:, k:k + par_fenetre]
+        parle = voix[debut + k:debut + k + par_fenetre] if voix else [True]
+        if not any(parle) or np.isnan(bloc).all():
+            continue                        # silence ou visages cachés : on garde le plan
+        score = np.array([np.nanmean(b) if (~np.isnan(b)).any() else -1e9 for b in bloc])
+        meilleur = int(np.argmax(score))
+        if (meilleur != actuel and score[meilleur] > 0
+                and score[meilleur] > PAROLE_MARGE * max(score[actuel], 0) + 0.3
+                and (debut + k - keys[-1][0]) / PAROLE_FPS >= PAROLE_PLAN_MIN):
+            actuel = meilleur
+            keys.append((debut + k, places[actuel]))
+    return keys
+
+
 def analyze_parole(src: Path, start: float, end: float, src_w: int, src_h: int,
                    crop_w: int) -> tuple[str, object]:
     """Cadrage serré sur la personne qui parle, avec un changement de plan net quand
@@ -272,9 +347,10 @@ def analyze_parole(src: Path, start: float, end: float, src_w: int, src_h: int,
     Méthode légère, sans modèle en plus : on repère les visages 6 fois par seconde, on
     mesure combien bouge le bas de chaque visage (la bouche) d'une image à l'autre, et
     pendant que le son indique une voix, celui dont la bouche bouge le plus parle.
+    Les podcasts déjà montés changent de caméra (gros plan, plan large) : on repère ces
+    changements et on décide plan par plan, pour ne jamais cadrer entre deux personnes.
     """
     import cv2
-    import numpy as np
 
     try:
         detect = _get_detector()
@@ -301,65 +377,30 @@ def analyze_parole(src: Path, start: float, end: float, src_w: int, src_h: int,
     except Exception as exc:
         print(f"[reframe] suivi de la parole impossible ({exc})")
         return "wide", None
-
-    places = _personnes(detections, src_w)
-    if not places:
+    if not any(detections):
         return "wide", None
+
     max_x = src_w - crop_w
 
     def to_x(c: float) -> int:
         return int(min(max(c - crop_w / 2, 0), max_x)) // 2 * 2
 
-    if len(places) == 1:                       # une seule personne : cadrage fixe sur elle
-        return "track", str(to_x(places[0]))
-
-    # Mouvement de la bouche de chaque personne, image par image
-    n = len(detections)
-    activite = np.full((len(places), n), np.nan)
-    precedent: dict[int, np.ndarray] = {}
-    for i, (faces, (gris, scale)) in enumerate(zip(detections, images)):
-        for cx, cy, w in faces:
-            p = int(np.argmin([abs(cx - x) for x in places]))
-            if abs(cx - places[p]) > 0.12 * src_w:
-                continue
-            # bas du visage : de la lèvre supérieure au menton
-            x0, x1 = int((cx - 0.3 * w) * scale), int((cx + 0.3 * w) * scale)
-            y0, y1 = int((cy + 0.15 * w) * scale), int((cy + 0.5 * w) * scale)
-            zone = gris[max(y0, 0):max(y1, 1), max(x0, 0):max(x1, 1)]
-            if zone.size < 20:
-                continue
-            zone = cv2.resize(zone, (32, 16)).astype(np.float32)
-            if p in precedent:
-                activite[p, i] = float(np.abs(zone - precedent[p]).mean())
-            precedent[p] = zone
-        for p in list(precedent):          # personne pas vue sur cette image : on oublie
-            if not any(abs(f[0] - places[p]) <= 0.12 * src_w for f in faces):
-                precedent.pop(p)
-
-    # Chaque personne a sa « bouche au repos » (barbe, lumière) : on la retire
-    for p in range(len(places)):
-        ligne = activite[p][~np.isnan(activite[p])]
-        if len(ligne):
-            activite[p] -= np.median(ligne)
-
     voix = _audio_actif(src, start, end, pas)
-    par_fenetre = max(1, int(PAROLE_FENETRE * PAROLE_FPS))
-    actuel = int(np.nanargmax(np.nanmean(np.where(np.isnan(activite), -1, activite), axis=1)))
-    keys = [(0.0, to_x(places[actuel]))]
-    for k in range(0, n, par_fenetre):
-        bloc = activite[:, k:k + par_fenetre]
-        parle = voix[k:k + par_fenetre] if voix else [True]
-        if not any(parle) or np.isnan(bloc).all():
-            continue                        # silence ou personne visible : on garde le plan
-        score = np.nan_to_num(np.nanmean(np.where(np.isnan(bloc), np.nan, bloc), axis=1), nan=-1e9)
-        meilleur = int(np.argmax(score))
-        t = k / PAROLE_FPS
-        if (meilleur != actuel and score[meilleur] > 0
-                and score[meilleur] > PAROLE_MARGE * max(score[actuel], 0) + 0.3
-                and t - keys[-1][0] >= PAROLE_PLAN_MIN):
-            actuel = meilleur
-            keys.append((round(t, 2), to_x(places[actuel])))
-
+    bornes = [0] + [i for i in _coupures(images) if i > 0] + [len(images)]
+    premier = next(f for f in detections if f)
+    x_courant = max(premier, key=lambda f: f[2])[0]
+    keys: list[tuple[float, int]] = []
+    for a, b in zip(bornes, bornes[1:]):
+        if b - a < 2:
+            continue
+        for i, cx in _parole_plan(detections, images, voix, src_w, a, b, x_courant):
+            x = to_x(cx)
+            if not keys or x != keys[-1][1]:
+                keys.append((round(i / PAROLE_FPS, 2), x))
+            x_courant = cx
+    if not keys:
+        return "wide", None
+    keys[0] = (0.0, keys[0][1])
     if len(keys) == 1:
         return "track", str(keys[0][1])
     # changements de plan nets (pas de glissement) : c'est le montage classique d'un podcast
