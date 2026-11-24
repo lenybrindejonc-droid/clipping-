@@ -71,6 +71,13 @@ depuis le Space : le jeton YouTube ne doit pas être sur un serveur public).
   `SEUIL_SOUS_TITRES_CLIP` (0.6). Testé sur une vidéo de 20 min à voix de synthèse (Whisper
   local) ; **le calcul de confiance Groq n'a pas pu être testé** (Groq inaccessible ici).
 
+- **24/11 : publication automatique via Buffer** (offre gratuite : 3 chaînes, 10 publications
+  programmées par chaîne à la fois), TikTok + YouTube Shorts, depuis son iPhone. **Ça marche.**
+  Mode automatique = vidéo publiée telle quelle (pas de texte ni musique TikTok) → cocher
+  « Incruster l'accroche » sur le site s'il veut l'accroche à l'écran. `programmer.sh` reste
+  pour YouTube mais les vidéos restent privées tant que le projet Google n'a pas passé l'audit.
+  Podcasts : clips jugés « bien » après le cadrage plein écran et les accroches « sujet ».
+
 ## Pièges rencontrés (ne pas refaire le diagnostic)
 
 1. **YouTube bloque les serveurs.** Depuis Hugging Face : connexion coupée (`SSL: UNEXPECTED_EOF`).
