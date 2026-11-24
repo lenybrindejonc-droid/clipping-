@@ -87,6 +87,11 @@ depuis le Space : le jeton YouTube ne doit pas être sur un serveur public).
   **pas avec ses vraies clés** (le premier envoi réel doit se faire en mode brouillon).
   Doc API : developers.buffer.com (autorisé dans l'environnement de dev, avec api.buffer.com).
 
+- **Clips pixelisés (24/11)** : cause n°1 = source en 720p (je lui avais conseillé `QUALITE=720`,
+  erreur : en 9:16 on garde une bande de 405 px étirée à 1080). Toujours télécharger en 1080p
+  ou plus. Compression relevée : CRF 17 (`CRF` dans .env), preset veryfast/faster au lieu de
+  superfast/veryfast, profil High, plafond 16 Mbit/s.
+
 ## Pièges rencontrés (ne pas refaire le diagnostic)
 
 1. **YouTube bloque les serveurs.** Depuis Hugging Face : connexion coupée (`SSL: UNEXPECTED_EOF`).

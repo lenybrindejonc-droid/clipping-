@@ -20,7 +20,10 @@ Progress = Callable[[float, str], None]
 WHISPER_MODEL = os.getenv("WHISPER_MODEL", "base")
 OUT_W, OUT_H = 1080, 1920
 # Petits processeurs (≤ 2 cœurs) : encodage plus rapide, fichier un peu plus gros
-X264_PRESET = os.getenv("X264_PRESET") or ("superfast" if (os.cpu_count() or 4) <= 2 else "veryfast")
+# Qualité d'image : « veryfast » garde un temps de montage raisonnable sur le serveur tout en
+# évitant l'image cubique de « superfast » ; CRF 17 = très proche de la source (plus bas = plus net)
+X264_PRESET = os.getenv("X264_PRESET") or ("veryfast" if (os.cpu_count() or 4) <= 2 else "faster")
+CRF = os.getenv("CRF", "17")
 
 _whisper = None
 
@@ -557,7 +560,8 @@ def render_clip(
         "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
         *entrees,
         "-filter_complex", vf, "-map", "[v]", "-map", "0:a?",
-        "-c:v", "libx264", "-preset", X264_PRESET, "-threads", "0", "-crf", "18" if high_quality else "20", "-pix_fmt", "yuv420p",
+        "-c:v", "libx264", "-preset", X264_PRESET, "-threads", "0", "-crf", "16" if high_quality else CRF, "-pix_fmt", "yuv420p",
+        "-profile:v", "high", "-maxrate", "16M", "-bufsize", "32M",   # plafond conseillé par TikTok
         "-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart",
         out.name,
     ]

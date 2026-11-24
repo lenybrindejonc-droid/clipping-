@@ -35,7 +35,9 @@ mkdir -p ~/videos ~/videos/.encours
 # dans videos, pour ne plus confondre un téléchargement inachevé avec une vraie vidéo.
 OUT="%(title).80s.%(ext)s"
 CHEMINS=(-P "home:$HOME/videos" -P "temp:$HOME/videos/.encours")
-QUALITE="${QUALITE:-1080}"   # QUALITE=720 ./telecharger.sh "lien"  → fichier 2 à 3 fois plus léger
+# 1080 par défaut. Ne PAS descendre à 720 pour les podcasts : le cadrage 9:16 ne garde qu'une
+# bande étroite de l'image, une source 720p donne des clips flous. QUALITE=1440 si la vidéo existe en 1440p.
+QUALITE="${QUALITE:-1080}"
 echo "📺 Qualité visée : ${QUALITE}p"
 FORMAT="-S res:${QUALITE},vcodec:h264,ext:mp4 --merge-output-format mp4"
 EJS=(--remote-components ejs:github)   # solveur des défis JavaScript de YouTube
