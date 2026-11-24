@@ -23,7 +23,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Redirect
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, ValidationError
 
-from . import lessons, pipeline, presets
+from . import buffer_pub, lessons, pipeline, presets
 from .highlights import find_moments
 from .subtitles import SEUIL_CLIP, confiance
 
@@ -710,6 +710,67 @@ async def envoyer_overlay(request: Request, nom: str):
         dest.unlink(missing_ok=True)
         raise HTTPException(400, "Ce fichier n'est pas une image lisible.")
     return {"nom": nom, "largeur": w, "hauteur": h, "plein_ecran": abs(w / h - 9 / 16) < 0.03}
+
+
+class EnvoiBuffer(BaseModel):
+    job_id: str | None = Field(None, pattern=r"^[0-9a-f]{10}$")
+    n: int | None = Field(None, ge=0, le=100)
+    cle: str | None = Field(None, pattern=r"^[0-9a-f]{12}$")   # clip de la bibliothèque
+    chaines: list[str] = Field(default_factory=list, max_length=10)
+    brouillon: bool = False   # test : le clip arrive en brouillon dans Buffer, rien n'est publié
+
+
+_dernier_menage = 0.0
+
+
+@app.get("/api/buffer")
+def etat_buffer():
+    """Buffer est-il réglé, et quelles chaînes TikTok / YouTube y sont connectées ?"""
+    etat = buffer_pub.configure()
+    if not etat["pret"]:
+        return etat | {"chaines": []}
+    try:
+        return etat | {"chaines": buffer_pub.chaines()}
+    except buffer_pub.ErreurEnvoi as exc:
+        return {"pret": False, "manque": [], "erreur": str(exc), "chaines": []}
+
+
+@app.post("/api/buffer/envoyer")
+def envoyer_buffer(envoi: EnvoiBuffer):
+    """Envoie UN clip (du projet ou de la bibliothèque) dans la file Buffer."""
+    global _dernier_menage
+    if not buffer_pub.configure()["pret"]:
+        raise HTTPException(400, "Buffer n'est pas encore réglé sur le site (clés manquantes).")
+    if envoi.cle:
+        dossier = BIBLIO / envoi.cle
+        meta = dossier / "meta.json"
+        if not meta.exists():
+            raise HTTPException(404, "Clip introuvable dans la bibliothèque.")
+        clip, fichier, nom = json.loads(meta.read_text()), dossier / "clip.mp4", envoi.cle
+    else:
+        job = jobs.get(envoi.job_id or "")
+        if not job or envoi.n is None or not 0 <= envoi.n < len(job["clips"]):
+            raise HTTPException(404, "Clip introuvable.")
+        if job["clips"][envoi.n].get("rendering"):
+            raise HTTPException(409, "Ce clip est en cours de montage : attends qu'il soit prêt.")
+        clip = job["clips"][envoi.n]
+        fichier, nom = JOBS / job["id"] / clip["file"], f"{job['id']}_{envoi.n}_v{clip.get('version', 1)}"
+    if not fichier.exists():
+        raise HTTPException(410, "La vidéo a été effacée par le serveur : refais le clip.")
+    if time.time() - _dernier_menage > 6 * 3600:      # place libérée sur Cloudinary
+        _dernier_menage = time.time()
+        buffer_pub.menage()
+    try:
+        resultats = buffer_pub.envoyer(fichier, nom, clip, envoi.chaines, envoi.brouillon)
+    except buffer_pub.ErreurEnvoi as exc:
+        raise HTTPException(502, str(exc))
+    if any(r["ok"] for r in resultats) and not envoi.brouillon:
+        marque = {"buffer_envoye": time.time()}
+        if envoi.cle:
+            meta.write_text(json.dumps(clip | marque, ensure_ascii=False, indent=1))
+        else:
+            _set_clip(envoi.job_id, envoi.n, **marque)
+    return {"resultats": resultats}
 
 
 @app.get("/api/jobs")

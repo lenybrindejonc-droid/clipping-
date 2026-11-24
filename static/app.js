@@ -240,11 +240,12 @@ function render(job) {
 
   const zip = $("zip-all");
   zip.hidden = !(job.status === "done" && job.clips.length);
+  if (!$("buffer-projet").querySelector(".buffer-go").disabled) bufferProjet(job);
   zip.href = `/api/jobs/${job.id}/zip`;
 
   const container = $("clips");
   job.clips.forEach((clip, i) => {
-    const sig = `${clip.version || 1}|${clip.rendering || ""}|${clip.error || ""}`;
+    const sig = `${clip.version || 1}|${clip.rendering || ""}|${clip.error || ""}|${clip.buffer_envoye || ""}`;
     const existing = container.children[i];
     if (existing && existing.dataset.sig === sig) return;
     const card = buildCard(job, clip, i);
@@ -263,7 +264,8 @@ function buildCard(job, clip, i) {
   video.src = src;
   video.poster = `/media/${job.id}/${clip.thumb}?v=${v}`;
   q(".score").textContent = `🔥 ${clip.virality_score}/100`;
-  q(".time").textContent = `${fmt(clip.start)} → ${fmt(clip.end)} · ${Math.round(clip.duration)}s`;
+  q(".time").textContent = `${fmt(clip.start)} → ${fmt(clip.end)} · ${Math.round(clip.duration)}s`
+    + (clip.buffer_envoye ? " · 📤 dans Buffer" : "");
   // Confiance de la transcription : sous 60 %, le clip sort sans sous-titres
   const conf = clip.confiance_sous_titres;
   if (conf != null) {
@@ -556,6 +558,7 @@ async function chargerBiblio() {
     ? `${clips.length} clip(s) gardés automatiquement. Ils sont supprimés au bout de ${garde_jours} jours.`
     : `Vide pour l'instant. Tes clips y seront rangés automatiquement et gardés ${garde_jours} jours.`;
 
+  bufferBiblio(clips);
   const liste = $("biblio-liste");
   liste.innerHTML = "";
   clips.forEach((c) => {
@@ -669,3 +672,98 @@ $("campagne").addEventListener("change", () => {
   $("preset-info").hidden = true;   // ses chiffres seraient ceux du type, pas de la campagne
   info.textContent = c.info;
 });
+
+
+// ---------------------------------------------------------------- envoi sur Buffer
+// Un encadré (projet ou bibliothèque) : on coche les chaînes, un clic, et chaque clip part
+// dans la file Buffer, qui le publie tout seul au prochain créneau.
+let BUFFER = null;   // { pret, manque, chaines, erreur }
+async function etatBuffer() {
+  if (!BUFFER) {
+    try { BUFFER = await (await fetch("/api/buffer")).json(); }
+    catch (e) { BUFFER = { pret: false, manque: [], chaines: [], erreur: "site injoignable" }; }
+  }
+  return BUFFER;
+}
+
+async function preparerBuffer(boite, aEnvoyer, envoyerUn, etiquette) {
+  const etat = await etatBuffer();
+  boite.hidden = false;
+  const info = boite.querySelector(".buffer-info");
+  const go = boite.querySelector(".buffer-go");
+  const zone = boite.querySelector(".buffer-chaines");
+  if (!etat.pret) {
+    info.textContent = etat.erreur
+      ? `⚠️ ${etat.erreur}`
+      : `Pas encore réglé : il manque ${etat.manque.join(" et ")} dans les réglages du site (fichier .env, puis ./deploy_hf.sh).`;
+    go.hidden = true; zone.innerHTML = "";
+    boite.querySelector(".buffer-brouillon").parentElement.hidden = true;
+    return;
+  }
+  if (!zone.children.length) {
+    etat.chaines.forEach((c) => {
+      const l = document.createElement("label");
+      l.className = "check";
+      l.innerHTML = `<input type="checkbox" checked /> <span></span>`;
+      l.querySelector("input").value = c.id;
+      l.querySelector("span").textContent =
+        `${c.service === "tiktok" ? "TikTok" : "YouTube"} : ${c.nom}${c.en_pause ? " (file en pause)" : ""}`;
+      zone.appendChild(l);
+    });
+  }
+  const liste = aEnvoyer();
+  info.textContent = liste.length
+    ? `${liste.length} clip(s) pas encore envoyé(s). Buffer les publiera tout seul, aux créneaux de ta file.`
+    : "Tous les clips sont déjà dans Buffer ✅";
+  go.hidden = !liste.length;
+  go.textContent = `Envoyer ${liste.length} ${etiquette} dans la file Buffer`;
+  go.onclick = async () => {
+    const chaines = [...zone.querySelectorAll("input:checked")].map((i) => i.value);
+    if (!chaines.length) { alert("Coche au moins une chaîne."); return; }
+    const brouillon = boite.querySelector(".buffer-brouillon").checked;
+    const suivi = boite.querySelector(".buffer-suivi");
+    suivi.innerHTML = "";
+    go.disabled = true;
+    for (const [i, item] of liste.entries()) {
+      go.textContent = `Envoi ${i + 1}/${liste.length}… (garde la page ouverte)`;
+      const li = document.createElement("li");
+      li.textContent = `${item.titre} : envoi…`;
+      suivi.appendChild(li);
+      try {
+        const r = await envoyerUn(item, chaines, brouillon);
+        const d = await r.json();
+        if (!r.ok) throw new Error(d.detail || "envoi refusé");
+        li.textContent = `${item.titre} : ` + d.resultats.map((x) =>
+          `${x.service === "tiktok" ? "TikTok" : "YouTube"} ${x.ok ? "✅" : "❌ " + x.erreur}`).join(" · ");
+      } catch (e) {
+        li.textContent = `${item.titre} : ❌ ${e.message}`;
+      }
+    }
+    go.disabled = false;
+    go.textContent = "Terminé ✅";
+  };
+}
+
+async function bufferProjet(job) {
+  const boite = $("buffer-projet");
+  if (job.status !== "done" || !job.clips.length) { boite.hidden = true; return; }
+  if (boite.dataset.job === job.id && boite.querySelector(".buffer-go").disabled) return; // envoi en cours
+  boite.dataset.job = job.id;
+  await preparerBuffer(boite,
+    () => job.clips.map((c, n) => ({ n, titre: c.title || `Clip ${n + 1}`, deja: c.buffer_envoye }))
+      .filter((c) => !c.deja),
+    (item, chaines, brouillon) => fetch("/api/buffer/envoyer", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ job_id: job.id, n: item.n, chaines, brouillon }),
+    }), "clip(s) du projet");
+}
+
+async function bufferBiblio(clips) {
+  await preparerBuffer($("buffer-biblio"),
+    () => clips.filter((c) => !c.publie_le && !c.buffer_envoye)
+      .map((c) => ({ cle: c.id, titre: c.title || "Clip" })),
+    (item, chaines, brouillon) => fetch("/api/buffer/envoyer", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ cle: item.cle, chaines, brouillon }),
+    }), "clip(s) de la bibliothèque");
+}

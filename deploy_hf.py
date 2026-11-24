@@ -74,7 +74,8 @@ def main() -> None:
         print("🔒 Space privé créé :", repo_id)
 
     # 2. Secrets (chiffrés chez Hugging Face, jamais dans le code)
-    secrets = {k: env.get(k, "") for k in ("ANTHROPIC_API_KEY", "GROQ_API_KEY")}
+    secrets = {k: env.get(k, "") for k in ("ANTHROPIC_API_KEY", "GROQ_API_KEY",
+                                            "BUFFER_API_KEY", "CLOUDINARY_URL")}
     if not secrets["ANTHROPIC_API_KEY"].startswith("sk-ant-"):
         print("⚠️  Pas de clé Claude dans .env : les moments seront choisis en mode basique.")
     if not secrets["GROQ_API_KEY"].startswith("gsk_"):

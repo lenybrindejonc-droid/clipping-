@@ -77,6 +77,15 @@ depuis le Space : le jeton YouTube ne doit pas être sur un serveur public).
   « Incruster l'accroche » sur le site s'il veut l'accroche à l'écran. `programmer.sh` reste
   pour YouTube mais les vidéos restent privées tant que le projet Google n'a pas passé l'audit.
   Podcasts : clips jugés « bien » après le cadrage plein écran et les accroches « sujet ».
+- **Envoi automatique vers Buffer depuis le site** (`buffer_pub.py`, encadré « 📤 Envoyer sur
+  Buffer » dans chaque projet et dans la Bibliothèque). Buffer n'accepte pas de fichier, seulement
+  un lien public durable → chaque clip est d'abord rangé sur **Cloudinary** (gratuit), puis
+  `createPost` (automatic, addToQueue ; YouTube : titre + catégorie 24 obligatoires). Vidéos
+  Cloudinary de plus de 21 jours supprimées automatiquement. Clés dans `.env` → secrets du Space
+  par `deploy_hf.py` : `BUFFER_API_KEY`, `CLOUDINARY_URL`. Case « Test : brouillon » pour
+  essayer sans publier. Testé avec de faux Buffer/Cloudinary qui vérifient chaque demande ;
+  **pas avec ses vraies clés** (le premier envoi réel doit se faire en mode brouillon).
+  Doc API : developers.buffer.com (autorisé dans l'environnement de dev, avec api.buffer.com).
 
 ## Pièges rencontrés (ne pas refaire le diagnostic)
 

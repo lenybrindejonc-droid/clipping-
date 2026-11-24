@@ -123,6 +123,14 @@
     <section id="vue-biblio" hidden>
       <p class="muted small" id="biblio-info"></p>
       <a id="biblio-zip" class="btn" download>⬇️ Télécharger les clips à publier</a>
+      <div id="buffer-biblio" class="buffer-box card" hidden>
+          <h3>📤 Envoyer sur Buffer</h3>
+          <p class="muted small buffer-info"></p>
+          <div class="buffer-chaines"></div>
+          <label class="check small"><input type="checkbox" class="buffer-brouillon" /> Test : envoyer en brouillon (rien n'est publié)</label>
+          <button type="button" class="btn buffer-go"></button>
+          <ul class="buffer-suivi small"></ul>
+        </div>
       <div id="biblio-liste" class="clips"></div>
     </section>
 
@@ -138,6 +146,14 @@
         <p id="job-note" class="warn" hidden></p>
         <button id="cancel-job" class="btn ghost" type="button" hidden>Annuler cette vidéo</button>
         <a id="zip-all" class="btn" hidden download>⬇️ Tout télécharger (clips + textes)</a>
+        <div id="buffer-projet" class="buffer-box" hidden>
+          <h3>📤 Envoyer sur Buffer</h3>
+          <p class="muted small buffer-info"></p>
+          <div class="buffer-chaines"></div>
+          <label class="check small"><input type="checkbox" class="buffer-brouillon" /> Test : envoyer en brouillon (rien n'est publié)</label>
+          <button type="button" class="btn buffer-go"></button>
+          <ul class="buffer-suivi small"></ul>
+        </div>
       </div>
       <div id="clips" class="clips"></div>
     </section>
