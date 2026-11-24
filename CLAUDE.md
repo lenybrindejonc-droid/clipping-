@@ -106,6 +106,12 @@ depuis le Space : le jeton YouTube ne doit pas être sur un serveur public).
    autorisés dans l'environnement « clipping » ; si le téléchargement échoue (serveur xet),
    `HF_HUB_DISABLE_XET=1`.
 
+13. **Le Chromebook récupère la MAUVAISE branche.** Chaque conversation travaille sur sa propre
+   branche (`ccr-…`), mais son `git pull` suit l'ancienne (`ccr-9cb66513-00vl9x`, branche par
+   défaut sur GitHub). Résultat le 24/11 : `deploy_hf.sh` remettait en ligne le site du
+   23/11 matin (pas de Boeshi, ni overlay, ni sous-titres, ni cadrage podcast). À chaque
+   nouvelle branche, lui faire basculer : `git fetch origin BRANCHE && git checkout -B BRANCHE FETCH_HEAD`.
+
 ## Son matériel et ses habitudes
 
 - **Chromebook** (Linux/penguin), Celeron N4020, 2 cœurs : très lent pour l'encodage.
